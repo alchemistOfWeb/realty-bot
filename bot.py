@@ -9,6 +9,9 @@ import logging
 import sys
 import os
 
+os.environ.setdefault('DJANGO_SETTINGS_MODULE', 'config.settings')
+django.setup()
+
 
 # third-party modules
 from dotenv import dotenv_values
@@ -33,6 +36,7 @@ from aiogram.fsm.context import FSMContext
 from magic_filter import F
 
 # handmade modules
+from botmodels.tasks import send_message_to_groups
 # from botmodels.models import UserProfile
 # import texts # mesage-templates
 
@@ -45,9 +49,7 @@ BOT_API_TOKEN = config.get('BOT_API_TOKEN')
 dp = Dispatcher()
 
 
-# Установите настройки Django для доступа к моделям
-# os.environ.setdefault('DJANGO_SETTINGS_MODULE', 'config.settings')
-# django.setup()
+
 
 
 
@@ -86,6 +88,31 @@ async def command_start_handler(message: Message) -> None:
     #     parse_mode=ParseMode.HTML
     # )
 
+@dp.message(lambda message: message.forward_date is not None)
+async def forward_message_handler(message: Message):
+    # photo_ids = list()
+    # unique_photos = {}
+    # if message.photo:
+    #     for photo in message.photo:
+    #         # Получаем первые 50 символов file_id
+    #         file_id_prefix = photo.file_id[:50]
+
+    #         # Проверяем, если у нас уже есть изображение с таким префиксом
+    #         if file_id_prefix not in unique_photos:
+    #             unique_photos[file_id_prefix] = photo  # Сохраняем новое изображение
+    #         else:
+    #             # Сравниваем размеры
+    #             existing_photo = unique_photos[file_id_prefix]
+    #             # Сравниваем по `width` и `height`
+    #             if (photo.width * photo.height) > (existing_photo.width * existing_photo.height):
+    #                 unique_photos[file_id_prefix] = photo  # Сохраняем большее изображение
+
+    #     # Получаем уникальные изображения с наибольшим размером
+    #     photo_ids = [photo.file_id for photo in unique_photos.values()]
+    #     print(f"Уникальные пересланные фото с наибольшим размером: {photo_ids}")
+
+    send_message_to_groups.delay(from_chat_id=message.chat.id, message_id=message.message_id)
+    # await message.answer(f"Get another forwarded message")
 
 
 async def main() -> None:
@@ -93,11 +120,11 @@ async def main() -> None:
     bot = Bot(token=BOT_API_TOKEN, default=DefaultBotProperties(parse_mode=ParseMode.HTML))
     await bot.delete_webhook()
     # And the run events dispatching
+    print("start polling")
     await dp.start_polling(bot)
-    print("start polling2")
+    # print("start polling2")
 
 
 if __name__ == "__main__":
-    print("start polling")
     logging.basicConfig(level=logging.INFO, stream=sys.stdout)
     asyncio.run(main())
