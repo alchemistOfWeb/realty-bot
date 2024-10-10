@@ -17,6 +17,7 @@ from aiogram.enums import ParseMode
 
 
 BOT_API_TOKEN = settings.BOT_API_TOKEN
+SEND_TASKS_COUNTDOWN = 10
 
 
 async def send_message_async(message_text: str) -> None:
@@ -33,9 +34,10 @@ async def send_message_async(message_text: str) -> None:
             print(f"Ошибка отправки сообщения в группу {group}: {e}")
 
 
-@shared_task
-def send_message_to_groups(message_text: str) -> None:
+@shared_task(bind=True)
+def send_message_to_groups(self, message_text: str) -> None:
     """
     Task for sending messagesin into the groups by Celery
     """
     asyncio.run(send_message_async(message_text))
+    self.apply_async((message_text,), countdown=SEND_TASKS_COUNTDOWN)

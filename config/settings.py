@@ -14,7 +14,9 @@ from pathlib import Path
 
 # third-party modules
 from dotenv import dotenv_values
+import psycopg2
 
+config = dotenv_values('.env')
 
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent
@@ -24,12 +26,14 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 # See https://docs.djangoproject.com/en/5.1/howto/deployment/checklist/
 
 # SECURITY WARNING: keep the secret key used in production secret!
-SECRET_KEY = 'django-insecure-14b3qm-zaklufap*kz=%8b!4_p)9bcm$dvj--)los4iu3nwydx'
+# SECRET_KEY = 'django-insecure-14b3qm-zaklufap*kz=%8b!4_p)9bcm$dvj--)los4iu3nwydx'
+SECRET_KEY = config.get('SECRET_KEY', 'your-default-secret-key')
 
 # SECURITY WARNING: don't run with debug turned on in production!
+DEBUG = config.get('DEBUG', '0') == '1'
 DEBUG = True
 
-ALLOWED_HOSTS = []
+ALLOWED_HOSTS = config.get("DJANGO_ALLOWED_HOSTS", "localhost").split(" ")
 
 
 # Application definition
@@ -39,8 +43,8 @@ INSTALLED_APPS = [
     'django.contrib.auth',
     'django.contrib.contenttypes',
     'django.contrib.sessions',
-    # 'django.contrib.messages',
-    # 'django.contrib.staticfiles',
+    'django.contrib.messages',
+    'django.contrib.staticfiles',
     'botmodels',
 ]
 
@@ -50,7 +54,7 @@ MIDDLEWARE = [
     'django.middleware.common.CommonMiddleware',
     'django.middleware.csrf.CsrfViewMiddleware',
     'django.contrib.auth.middleware.AuthenticationMiddleware',
-    # 'django.contrib.messages.middleware.MessageMiddleware',
+    'django.contrib.messages.middleware.MessageMiddleware',
     'django.middleware.clickjacking.XFrameOptionsMiddleware',
 ]
 
@@ -78,23 +82,33 @@ WSGI_APPLICATION = 'config.wsgi.application'
 # Database
 # https://docs.djangoproject.com/en/5.1/ref/settings/#databases
 
+
+DATABASE_NAME = config.get('POSTGRES_DB')
+DATABASE_USER = config.get('POSTGRES_USER')
+DATABASE_PASSWORD = config.get('POSTGRES_PASSWORD', "django_password")
+
 DATABASES = {
     'default': {
-        'ENGINE': 'django.db.backends.sqlite3',
-        'NAME': BASE_DIR / 'db.sqlite3',
+        'ENGINE': 'django.db.backends.postgresql',
+        'NAME': DATABASE_NAME,
+        'USER': DATABASE_USER,
+        'PASSWORD': DATABASE_PASSWORD,
+        'HOST': config.get('POSTGRES_HOST', 'db'),
+        'PORT': config.get('POSTGRES_PORT', '5432'),
     }
 }
 
 # Telegram bot api settings
 
-config = dotenv_values('.env')
+
 BOT_API_TOKEN = config.get('BOT_API_TOKEN')
 
 # Celery
 # https://docs.celeryq.dev/en/stable/django/first-steps-with-django.html
 # CELERY_RESULT_BACKEND = 'django-db'
 # CELERY_CACHE_BACKEND = 'default'
-CELERY_BROKER_URL = 'redis://localhost:6379/0'  # Redis как брокер для задач
+CELERY_BROKER_URL = config.get("CELERY_BROKER_URL", 'redis://redis:6379/0')
+CELERY_RESULT_BACKEND = config.get('CELERY_RESULT_BACKEND', 'redis://redis:6379/0')
 CELERY_ACCEPT_CONTENT = ['json']
 CELERY_TASK_SERIALIZER = 'json'
 
@@ -139,6 +153,4 @@ STATIC_URL = 'static/'
 # https://docs.djangoproject.com/en/5.1/ref/settings/#default-auto-field
 
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
-
-
 

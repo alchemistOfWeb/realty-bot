@@ -50,12 +50,25 @@ dp = Dispatcher()
 # django.setup()
 
 
+
+
+
+# TMP BOT SETTINGS
+groups_ids = [2320898941]
+
+def send_messages():
+    for group_id in groups_ids:
+        ...
+
+
 @dp.message(CommandStart())
 async def command_start_handler(message: Message) -> None:
     """
     This handler receives messages with `/start` command
+    TODO: must work only for admins in their individual chats
     """
-    await message.answer(f"Hello, {html.bold(message.from_user.full_name)}!")
+    await message.answer(f"Здравствуйте, {html.bold(message.from_user.full_name)}!")
+
 
     # kb = [
     #     [KeyboardButton(text="Получить расклад🎴")]
@@ -82,6 +95,7 @@ async def main() -> None:
     # And the run events dispatching
     await dp.start_polling(bot)
     print("start polling2")
+
 
 if __name__ == "__main__":
     print("start polling")
