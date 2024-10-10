@@ -12,6 +12,10 @@ https://docs.djangoproject.com/en/5.1/ref/settings/
 
 from pathlib import Path
 
+# third-party modules
+from dotenv import dotenv_values
+
+
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent
 
@@ -33,7 +37,7 @@ ALLOWED_HOSTS = []
 INSTALLED_APPS = [
     'django.contrib.admin',
     'django.contrib.auth',
-    # 'django.contrib.contenttypes',
+    'django.contrib.contenttypes',
     'django.contrib.sessions',
     # 'django.contrib.messages',
     # 'django.contrib.staticfiles',
@@ -81,6 +85,19 @@ DATABASES = {
     }
 }
 
+# Telegram bot api settings
+
+config = dotenv_values('.env')
+BOT_API_TOKEN = config.get('BOT_API_TOKEN')
+
+# Celery
+# https://docs.celeryq.dev/en/stable/django/first-steps-with-django.html
+# CELERY_RESULT_BACKEND = 'django-db'
+# CELERY_CACHE_BACKEND = 'default'
+CELERY_BROKER_URL = 'redis://localhost:6379/0'  # Redis как брокер для задач
+CELERY_ACCEPT_CONTENT = ['json']
+CELERY_TASK_SERIALIZER = 'json'
+
 
 # Password validation
 # https://docs.djangoproject.com/en/5.1/ref/settings/#auth-password-validators
@@ -122,3 +139,6 @@ STATIC_URL = 'static/'
 # https://docs.djangoproject.com/en/5.1/ref/settings/#default-auto-field
 
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
+
+
+
