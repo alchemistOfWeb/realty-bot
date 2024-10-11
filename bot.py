@@ -36,7 +36,7 @@ from aiogram.fsm.context import FSMContext
 from magic_filter import F
 
 # handmade modules
-from botmodels.tasks import send_message_to_groups
+from botmodels.tasks import send_message_to_groups, send_message_async
 # from botmodels.models import UserProfile
 # import texts # mesage-templates
 
@@ -88,31 +88,70 @@ async def command_start_handler(message: Message) -> None:
     #     parse_mode=ParseMode.HTML
     # )
 
+from collections import defaultdict
+
+media_groups_cache = defaultdict(list)
+
+
+def get_unique_photo(photos: list):
+    return photos[0]
+    # unique_photos = {}
+    # for photo in message.photo:
+    #     # Получаем первые 50 символов file_id
+        
+    #     file_id_prefix = photo.file_id[:50]
+
+    #     # Проверяем, если у нас уже есть изображение с таким префиксом
+    #     if file_id_prefix not in unique_photos:
+    #         unique_photos[file_id_prefix] = photo  # Сохраняем новое изображение
+    #     else:
+    #         # Сравниваем размеры
+    #         existing_photo = unique_photos[file_id_prefix]
+    #         # Сравниваем по `width` и `height`
+    #         if (photo.width * photo.height) > (existing_photo.width * existing_photo.height):
+    #             unique_photos[file_id_prefix] = photo  
+
+
+# @dp.message(lambda message: message.forward_date is not None)
+# @dp.message(lambda message: message.caption is not None)
 @dp.message(lambda message: message.forward_date is not None)
 async def forward_message_handler(message: Message):
+    print(str(message) + "\n" + ("-"*80) + "\n")
     # photo_ids = list()
-    # unique_photos = {}
     # if message.photo:
-    #     for photo in message.photo:
-    #         # Получаем первые 50 символов file_id
-    #         file_id_prefix = photo.file_id[:50]
-
-    #         # Проверяем, если у нас уже есть изображение с таким префиксом
-    #         if file_id_prefix not in unique_photos:
-    #             unique_photos[file_id_prefix] = photo  # Сохраняем новое изображение
-    #         else:
-    #             # Сравниваем размеры
-    #             existing_photo = unique_photos[file_id_prefix]
-    #             # Сравниваем по `width` и `height`
-    #             if (photo.width * photo.height) > (existing_photo.width * existing_photo.height):
-    #                 unique_photos[file_id_prefix] = photo  # Сохраняем большее изображение
-
+    #     unique_photo = get_unique_photo(message.photo)
+        
     #     # Получаем уникальные изображения с наибольшим размером
-    #     photo_ids = [photo.file_id for photo in unique_photos.values()]
+    #     photo_ids.append(unique_photo.file_id)
     #     print(f"Уникальные пересланные фото с наибольшим размером: {photo_ids}")
 
-    send_message_to_groups.delay(from_chat_id=message.chat.id, message_id=message.message_id)
-    # await message.answer(f"Get another forwarded message")
+
+    media_group_id = message.media_group_id
+    media_groups_cache[media_group_id].append(message)
+
+    print("media_groups_cache: ", len(media_groups_cache[media_group_id]))
+    # Если это последнее сообщение медиа-группы (обычно у последнего сообщения есть caption)
+    if message.caption:
+        await asyncio.sleep(1)
+
+        media_list = []
+        caption = None
+
+        print("media_groups_loop: ", len(media_groups_cache[media_group_id]))
+        for msg in media_groups_cache[media_group_id]:
+            # Проверяем есть ли подпись в текущем сообщении
+            if msg.caption:
+                caption = msg.caption
+            
+            # Если есть изображение, добавляем его в список
+            if msg.photo:
+                media_list.append(msg.photo[-1].file_id)
+        
+        del media_groups_cache[media_group_id]
+
+        print("media_list: ", media_list)
+        await send_message_async(media_list, caption)
+        # send_message_to_groups.delay(media_list, caption)
 
 
 async def main() -> None:
