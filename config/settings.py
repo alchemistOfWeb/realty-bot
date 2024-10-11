@@ -45,6 +45,7 @@ INSTALLED_APPS = [
     'django.contrib.sessions',
     'django.contrib.messages',
     'django.contrib.staticfiles',
+    'django_celery_beat',
     'botmodels',
 ]
 
@@ -98,10 +99,21 @@ DATABASES = {
     }
 }
 
+CACHES = {
+    'default': {
+        'BACKEND': 'django_redis.cache.RedisCache',
+        'LOCATION': 'redis://redis:6379/1',
+        'OPTIONS': {
+            'CLIENT_CLASS': 'django_redis.client.DefaultClient',
+        }
+    }
+}
+
 # Telegram bot api settings
-
-
+BOT_DEFAULT_COUNTDOWN = config.get('BOT_DEFAULT_COUNTDOWN', 100)
 BOT_API_TOKEN = config.get('BOT_API_TOKEN')
+BOT_START_SENDING_HOUR = config.get('BOT_START_SENDING_HOUR')
+BOT_END_SENDING_HOUR = config.get('BOT_END_SENDING_HOUR')
 
 # Celery
 # https://docs.celeryq.dev/en/stable/django/first-steps-with-django.html
@@ -111,6 +123,7 @@ CELERY_BROKER_URL = config.get("CELERY_BROKER_URL", 'redis://redis:6379/0')
 CELERY_RESULT_BACKEND = config.get('CELERY_RESULT_BACKEND', 'redis://redis:6379/0')
 CELERY_ACCEPT_CONTENT = ['json']
 CELERY_TASK_SERIALIZER = 'json'
+CELERY_BEAT_SCHEDULER = 'django_celery_beat.schedulers.DatabaseScheduler'
 
 
 # Password validation

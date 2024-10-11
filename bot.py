@@ -12,6 +12,7 @@ import os
 os.environ.setdefault('DJANGO_SETTINGS_MODULE', 'config.settings')
 django.setup()
 
+from django.conf import settings
 
 # third-party modules
 from dotenv import dotenv_values
@@ -36,7 +37,8 @@ from aiogram.fsm.context import FSMContext
 from magic_filter import F
 
 # handmade modules
-from botmodels.tasks import send_message_to_groups, send_message_async
+from botmodels.tasks import send_message_to_groups, send_message_async, add_task_to_queue
+
 # from botmodels.models import UserProfile
 # import texts # mesage-templates
 
@@ -69,7 +71,9 @@ async def command_start_handler(message: Message) -> None:
     This handler receives messages with `/start` command
     TODO: must work only for admins in their individual chats
     """
-    await message.answer(f"Здравствуйте, {html.bold(message.from_user.full_name)}!")
+    await message.answer(
+        f"Здравствуйте, {html.bold(message.from_user.full_name)}!\n" +\
+        f"Данный бот обрабатывает пересылаемые сообщения и рассылает их раз в {settings.BOT_DEFAULT_COUNTDOWN} секунд")
 
 
     # kb = [
@@ -122,7 +126,7 @@ async def forward_message_handler(message: Message):
 
         print("media_list: ", media_list)
         # await send_message_async(media_list, caption)
-        send_message_to_groups.delay(media_list, caption, message.chat.id, message_ids)
+        add_task_to_queue(media_list, caption, message.chat.id, message_ids)
 
 
 async def main() -> None:

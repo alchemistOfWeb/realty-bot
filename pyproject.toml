@@ -13,6 +13,9 @@ aiogram = "^3.13.1"
 python-dotenv = "^1.0.1"
 celery = {extras = ["redis"], version = "^5.4.0"}
 psycopg2-binary = "^2.9.9"
+django-celery-beat = "^2.7.0"
+pytz = "^2024.2"
+django-redis = "^5.4.0"
 
 
 [build-system]
