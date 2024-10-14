@@ -24,7 +24,7 @@ from aiogram.utils.media_group import MediaGroupBuilder
 
 
 logger = get_task_logger(__name__)
-CACHE_KEY = 'last_task_eta'
+LAST_TASK_CACHE_KEY = 'last_task_eta'
 
 async def send_message_async(
     media_list:list, caption:str, 
@@ -70,10 +70,6 @@ def send_message_to_groups(
     Task for sending messagesin into the groups by Celery
     """
     asyncio.run(send_message_async(media_list, caption, bot_chat_id, message_ids))
-    # self.apply_async(
-    #     (media_list, caption, bot_chat_id, message_ids),
-    #     countdown=settings.BOT_DEFAULT_COUNTDOWN
-    # )
 
 
 def get_next_task_eta():
@@ -81,7 +77,9 @@ def get_next_task_eta():
     start_time = now.replace(hour=int(settings.BOT_START_SENDING_HOUR), minute=0, second=0, microsecond=0)
     end_time = now.replace(hour=int(settings.BOT_END_SENDING_HOUR), minute=55, second=0, microsecond=0)
 
-    last_task_eta = cache.get(CACHE_KEY)
+    # Yes, we use cache as a storage for some variables
+    last_task_eta = cache.get(LAST_TASK_CACHE_KEY)
+
     if not last_task_eta:
         last_task_eta = start_time if now < start_time else now
     else:
@@ -93,10 +91,7 @@ def get_next_task_eta():
 
         last_task_eta = next_eta
     
-    cache.set(CACHE_KEY, last_task_eta.isoformat())
-
-    # interval = datetime.timedelta(seconds=int(settings.BOT_DEFAULT_COUNTDOWN))
-    # next_eta = eta + interval
+    cache.set(LAST_TASK_CACHE_KEY, last_task_eta.isoformat())
 
     return last_task_eta
 

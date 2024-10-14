@@ -20,7 +20,7 @@ from dotenv import dotenv_values
 # aoigram modules
 from aiogram import Bot, Dispatcher, html
 from aiogram.client.default import DefaultBotProperties
-from aiogram.enums import ParseMode
+from aiogram.enums import ParseMode, ChatType
 from aiogram.filters import CommandStart
 
 from aiogram.utils.keyboard import (
@@ -51,46 +51,19 @@ BOT_API_TOKEN = config.get('BOT_API_TOKEN')
 dp = Dispatcher()
 
 
-
-
-
-
-
-
-# TMP BOT SETTINGS
-groups_ids = [2320898941]
-
-def send_messages():
-    for group_id in groups_ids:
-        ...
-
-
 @dp.message(CommandStart())
 async def command_start_handler(message: Message) -> None:
     """
     This handler receives messages with `/start` command
     TODO: must work only for admins in their individual chats
     """
+    if message.chat.type != ChatType.PRIVATE:
+        return
+
     await message.answer(
         f"Здравствуйте, {html.bold(message.from_user.full_name)}!\n" +\
         f"Данный бот обрабатывает пересылаемые сообщения и рассылает их раз в {settings.BOT_DEFAULT_COUNTDOWN} секунд")
 
-
-    # kb = [
-    #     [KeyboardButton(text="Получить расклад🎴")]
-    # ]
-    # mrkp = ReplyKeyboardMarkup(
-    #     keyboard=kb, resize_keyboard=True
-    # )
-    
-    # await message.bot.send_message()
-    # await message.bot.send_photo(
-    #     chat_id=message.from_user.id,
-    #     photo=FSInputFile(image_path), 
-    #     caption="hello i'm a bot", 
-    #     reply_markup=mrkp,
-    #     parse_mode=ParseMode.HTML
-    # )
 
 from collections import defaultdict
 
@@ -101,7 +74,9 @@ media_groups_cache = defaultdict(list)
 # @dp.message(lambda message: message.caption is not None)
 @dp.message(lambda message: message.forward_date is not None)
 async def forward_message_handler(message: Message):
-    print(str(message) + "\n" + ("-"*80) + "\n")
+    # print(str(message) + "\n" + ("-"*80) + "\n")
+    if message.chat.type != ChatType.PRIVATE:
+        return
 
     media_group_id = message.media_group_id
     media_groups_cache[media_group_id].append(message)
@@ -124,7 +99,7 @@ async def forward_message_handler(message: Message):
         
         del media_groups_cache[media_group_id]
 
-        print("media_list: ", media_list)
+        # print("media_list: ", media_list)
         # await send_message_async(media_list, caption)
         add_task_to_queue(media_list, caption, message.chat.id, message_ids)
 
