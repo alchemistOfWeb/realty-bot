@@ -13,10 +13,20 @@ https://docs.djangoproject.com/en/5.1/ref/settings/
 from pathlib import Path
 
 # third-party modules
-from dotenv import dotenv_values
+import os
+from dotenv import dotenv_values, load_dotenv
 import psycopg2
 
-config = dotenv_values('.env')
+
+if os.getenv("RAILWAY_ENVIRONMENT") is None:  # Railway добавляет эту переменную автоматически
+    load_dotenv()
+
+
+
+
+
+
+# config = dotenv_values('.env')
 
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent
@@ -27,14 +37,16 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 
 # SECURITY WARNING: keep the secret key used in production secret!
 # SECRET_KEY = 'django-insecure-14b3qm-zaklufap*kz=%8b!4_p)9bcm$dvj--)los4iu3nwydx'
-SECRET_KEY = config.get('SECRET_KEY', 'your-default-secret-key')
+# SECRET_KEY = config.get('SECRET_KEY', 'your-default-secret-key')
+SECRET_KEY = os.getenv('SECRET_KEY', 'your-default-secret-key')
 
 # SECURITY WARNING: don't run with debug turned on in production!
-DEBUG = config.get('DEBUG', '0') == '1'
-DEBUG = True
+# DEBUG = config.get('DEBUG', '0') == '1'
+DEBUG = os.getenv("DEBUG", "0") == "1"
+# DEBUG = True
 
-ALLOWED_HOSTS = config.get("DJANGO_ALLOWED_HOSTS", "localhost").split(" ")
-
+# ALLOWED_HOSTS = config.get("DJANGO_ALLOWED_HOSTS", "localhost").split(" ")
+ALLOWED_HOSTS = os.getenv("DJANGO_ALLOWED_HOSTS", "localhost").split()
 
 # Application definition
 
@@ -84,9 +96,20 @@ WSGI_APPLICATION = 'config.wsgi.application'
 # https://docs.djangoproject.com/en/5.1/ref/settings/#databases
 
 
-DATABASE_NAME = config.get('POSTGRES_DB')
-DATABASE_USER = config.get('POSTGRES_USER')
-DATABASE_PASSWORD = config.get('POSTGRES_PASSWORD', "django_password")
+
+# DATABASE_HOST = config.get('POSTGRES_HOST', 'db')
+DATABASE_HOST = os.getenv("POSTGRES_HOST", "localhost")
+# DATABASE_PORT = config.get('POSTGRES_PORT', '5432')
+DATABASE_PORT = os.getenv("POSTGRES_PORT", "5432")
+
+# DATABASE_NAME = config.get('POSTGRES_DB')
+DATABASE_NAME = os.getenv("POSTGRES_DB")
+
+# DATABASE_USER = config.get('POSTGRES_USER')
+DATABASE_USER = os.getenv("POSTGRES_USER")
+
+# DATABASE_PASSWORD = config.get('POSTGRES_PASSWORD', "django_password")
+DATABASE_PASSWORD = os.getenv("POSTGRES_PASSWORD")
 
 DATABASES = {
     'default': {
@@ -94,8 +117,8 @@ DATABASES = {
         'NAME': DATABASE_NAME,
         'USER': DATABASE_USER,
         'PASSWORD': DATABASE_PASSWORD,
-        'HOST': config.get('POSTGRES_HOST', 'db'),
-        'PORT': config.get('POSTGRES_PORT', '5432'),
+        'HOST': DATABASE_HOST,
+        'PORT': DATABASE_PORT,
     }
 }
 
@@ -109,18 +132,32 @@ CACHES = {
     }
 }
 
+
+
+
 # Telegram bot api settings
-BOT_DEFAULT_COUNTDOWN = config.get('BOT_DEFAULT_COUNTDOWN', 100)
-BOT_API_TOKEN = config.get('BOT_API_TOKEN')
-BOT_START_SENDING_HOUR = config.get('BOT_START_SENDING_HOUR')
-BOT_END_SENDING_HOUR = config.get('BOT_END_SENDING_HOUR')
+# BOT_DEFAULT_COUNTDOWN = config.get('BOT_DEFAULT_COUNTDOWN', 100)
+BOT_DEFAULT_COUNTDOWN = int(os.getenv("BOT_DEFAULT_COUNTDOWN", 60))
+
+# BOT_API_TOKEN = config.get('BOT_API_TOKEN')
+BOT_API_TOKEN = os.getenv("BOT_API_TOKEN")
+
+# BOT_START_SENDING_HOUR = config.get('BOT_START_SENDING_HOUR')
+BOT_START_SENDING_HOUR = int(os.getenv("BOT_START_SENDING_HOUR", 8))
+
+# BOT_END_SENDING_HOUR = config.get('BOT_END_SENDING_HOUR')
+BOT_END_SENDING_HOUR = int(os.getenv("BOT_END_SENDING_HOUR", 23))
 
 # Celery
 # https://docs.celeryq.dev/en/stable/django/first-steps-with-django.html
 # CELERY_RESULT_BACKEND = 'django-db'
 # CELERY_CACHE_BACKEND = 'default'
-CELERY_BROKER_URL = config.get("CELERY_BROKER_URL", 'redis://redis:6379/0')
-CELERY_RESULT_BACKEND = config.get('CELERY_RESULT_BACKEND', 'redis://redis:6379/0')
+
+
+# CELERY_BROKER_URL = config.get("CELERY_BROKER_URL", 'redis://redis:6379/0')
+CELERY_BROKER_URL = os.getenv("CELERY_BROKER_URL", 'redis://redis:6379/0')
+# CELERY_RESULT_BACKEND = config.get('CELERY_RESULT_BACKEND', 'redis://redis:6379/0')
+CELERY_RESULT_BACKEND = os.getenv("CELERY_RESULT_BACKEND", 'redis://redis:6379/0')
 CELERY_ACCEPT_CONTENT = ['json']
 CELERY_TASK_SERIALIZER = 'json'
 CELERY_BEAT_SCHEDULER = 'django_celery_beat.schedulers.DatabaseScheduler'
