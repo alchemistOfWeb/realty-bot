@@ -21,6 +21,7 @@ RUN poetry install --no-dev --no-interaction --no-ansi
 # may be should to remove this COPY
 COPY . /usr/src/app/
 
-RUN chmod +x /entrypoint.sh
+COPY entrypoint.sh /usr/src/app/
+RUN chmod +x entrypoint.sh
 
 ENTRYPOINT ["/usr/src/app/entrypoint.sh"]
