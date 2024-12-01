@@ -18,7 +18,10 @@ RUN pip install --no-cache-dir poetry
 
 RUN poetry install --no-dev --no-interaction --no-ansi
 
+ENV DEBUG=${DEBUG}
+ENV SECRET_KEY=${SECRET_KEY}
 RUN printenv
+RUN echo ${SECRET_KEY}
 
 # may be should to remove this COPY
 COPY . /usr/src/app/
