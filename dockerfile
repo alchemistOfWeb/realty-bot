@@ -12,7 +12,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 
 WORKDIR /usr/src/app
 
-COPY pyproject.toml poetry.lock /usr/src/app/
+COPY pyproject.toml /usr/src/app/
 
 RUN pip install --no-cache-dir poetry
 
