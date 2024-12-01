@@ -18,6 +18,8 @@ RUN pip install --no-cache-dir poetry
 
 RUN poetry install --no-dev --no-interaction --no-ansi
 
+RUN printenv
+
 # may be should to remove this COPY
 COPY . /usr/src/app/
 COPY ./entrypoint.sh /usr/src/app/
