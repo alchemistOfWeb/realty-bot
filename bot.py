@@ -44,8 +44,8 @@ from botmodels.tasks import send_message_to_groups, send_message_async, add_task
 
 
 # ENV variables
-config = dotenv_values('.env')
-BOT_API_TOKEN = config.get('BOT_API_TOKEN')
+# config = dotenv_values('.env')
+BOT_API_TOKEN = os.getenv('BOT_API_TOKEN')
 
 # set dispatcher for tg bot handlers
 dp = Dispatcher()
