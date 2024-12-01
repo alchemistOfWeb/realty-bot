@@ -92,6 +92,23 @@ TEMPLATES = [
 WSGI_APPLICATION = 'config.wsgi.application'
 
 
+
+# Celery
+# https://docs.celeryq.dev/en/stable/django/first-steps-with-django.html
+# CELERY_RESULT_BACKEND = 'django-db'
+# CELERY_CACHE_BACKEND = 'default'
+
+
+# CELERY_BROKER_URL = config.get("CELERY_BROKER_URL", 'redis://redis:6379/0')
+CELERY_BROKER_URL = os.getenv("CELERY_BROKER_URL", 'redis://redis:6379/0')
+# CELERY_RESULT_BACKEND = config.get('CELERY_RESULT_BACKEND', 'redis://redis:6379/0')
+CELERY_RESULT_BACKEND = os.getenv("CELERY_RESULT_BACKEND", 'redis://redis:6379/0')
+CELERY_ACCEPT_CONTENT = ['json']
+CELERY_TASK_SERIALIZER = 'json'
+CELERY_BEAT_SCHEDULER = 'django_celery_beat.schedulers.DatabaseScheduler'
+
+
+
 # Database
 # https://docs.djangoproject.com/en/5.1/ref/settings/#databases
 
@@ -125,7 +142,7 @@ DATABASES = {
 CACHES = {
     'default': {
         'BACKEND': 'django_redis.cache.RedisCache',
-        'LOCATION': 'redis://redis:6379/1',
+        'LOCATION': CELERY_BROKER_URL,
         'OPTIONS': {
             'CLIENT_CLASS': 'django_redis.client.DefaultClient',
         }
@@ -147,20 +164,6 @@ BOT_START_SENDING_HOUR = int(os.getenv("BOT_START_SENDING_HOUR", 8))
 
 # BOT_END_SENDING_HOUR = config.get('BOT_END_SENDING_HOUR')
 BOT_END_SENDING_HOUR = int(os.getenv("BOT_END_SENDING_HOUR", 23))
-
-# Celery
-# https://docs.celeryq.dev/en/stable/django/first-steps-with-django.html
-# CELERY_RESULT_BACKEND = 'django-db'
-# CELERY_CACHE_BACKEND = 'default'
-
-
-# CELERY_BROKER_URL = config.get("CELERY_BROKER_URL", 'redis://redis:6379/0')
-CELERY_BROKER_URL = os.getenv("CELERY_BROKER_URL", 'redis://redis:6379/0')
-# CELERY_RESULT_BACKEND = config.get('CELERY_RESULT_BACKEND', 'redis://redis:6379/0')
-CELERY_RESULT_BACKEND = os.getenv("CELERY_RESULT_BACKEND", 'redis://redis:6379/0')
-CELERY_ACCEPT_CONTENT = ['json']
-CELERY_TASK_SERIALIZER = 'json'
-CELERY_BEAT_SCHEDULER = 'django_celery_beat.schedulers.DatabaseScheduler'
 
 
 # Password validation
