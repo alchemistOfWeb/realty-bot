@@ -7,6 +7,7 @@ import asyncio
 import time
 import datetime
 import pytz
+from threading import Lock
 
 # django
 from django.conf import settings
@@ -21,6 +22,42 @@ from aiogram.client.default import DefaultBotProperties
 from aiogram.enums import ParseMode
 from aiogram.types import InputMediaPhoto, InputMedia
 from aiogram.utils.media_group import MediaGroupBuilder
+
+
+class SingletonMeta(type):
+    """Metaclass implementing Singleton."""
+    _instances = {}
+    _lock = Lock()  # for thread safety
+
+    def __call__(cls, *args, **kwargs):
+        with cls._lock:
+            if cls not in cls._instances:
+                instance = super().__call__(*args, **kwargs)
+                cls._instances[cls] = instance
+        return cls._instances[cls]
+
+
+class BotSetting(metaclass=SingletonMeta):
+    default_timeout = None
+
+    def __init__(self, prefix="bot_setting:"):
+        self.prefix = prefix
+
+    def _key(self, name):
+        """incapsulating variables of the settings from other db vars"""
+        return f"{self.prefix}{name}"
+
+    def get(self, name, default=None):
+        key = self._key(name)
+        return cache.get(key, default)
+
+    def set(self, name, value, timeout=None):
+        key = self._key(name)
+        cache.set(key, value, timeout or self.default_timeout)
+
+    def delete(self, name):
+        key = self._key(name)
+        cache.delete(key)
 
 
 logger = get_task_logger(__name__)
@@ -73,33 +110,34 @@ def send_message_to_groups(
 
 
 def get_next_task_eta():
-    now = datetime.datetime.now(pytz.timezone('Asia/Yerevan'))  
-    start_time = now.replace(hour=int(settings.BOT_START_SENDING_HOUR), minute=0, second=0, microsecond=0)
-    end_time = now.replace(hour=int(settings.BOT_END_SENDING_HOUR), minute=55, second=0, microsecond=0)
+    now = datetime.datetime.now(pytz.timezone('Asia/Yerevan'))  # TODO: Incapsulate getting hours/minutes
+    hour, minute = settings.BOT_START_SENDING_TIME.split(':')
+    start_time = now.replace(hour=int(hour), minute=int(minute), second=0)
+    hour, minute = settings.BOT_END_SENDING_TIME.split(':')
+    end_time = now.replace(hour=int(hour), minute=int(minute), second=0)
 
-    # Yes, we use cache as a storage for some variables
-    last_task_eta = cache.get(LAST_TASK_CACHE_KEY)
+    last_task_eta = BotSetting().get(LAST_TASK_CACHE_KEY)
 
     if not last_task_eta:
         last_task_eta = start_time if now < start_time else now
     else:
         last_task_eta = datetime.datetime.fromisoformat(last_task_eta)
-        next_eta = last_task_eta + datetime.timedelta(seconds=int(settings.BOT_DEFAULT_COUNTDOWN))
+        minutes, seconds = settings.BOT_DEFAULT_COUNTDOWN.split(':')
+        next_eta = last_task_eta + datetime.timedelta(minutes=int(minutes), seconds=int(seconds))
 
         if next_eta >= end_time:
             next_eta = start_time + datetime.timedelta(days=1)
 
         last_task_eta = next_eta
     
-    cache.set(LAST_TASK_CACHE_KEY, last_task_eta.isoformat())
+    BotSetting().set(LAST_TASK_CACHE_KEY, last_task_eta.isoformat())
 
     return last_task_eta
 
 
 def add_task_to_queue(media_list: list, caption: str, bot_chat_id: str = None, message_ids: list = None):
     """
-    Функция для динамического добавления задач в очередь.
-    Запускает задачу каждые 20 минут в интервале с 8:00 до 20:00.
+    Dinamically add tasks to the queue.
     """
     
     next_eta = get_next_task_eta()

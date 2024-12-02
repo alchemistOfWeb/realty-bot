@@ -100,9 +100,10 @@ WSGI_APPLICATION = 'config.wsgi.application'
 
 
 # CELERY_BROKER_URL = config.get("CELERY_BROKER_URL", 'redis://redis:6379/0')
-CELERY_BROKER_URL = os.getenv("CELERY_BROKER_URL", 'redis://redis:6379/0')
+REDIS_URL = os.getenv("CELERY_BROKER_URL", 'redis://redis:6379')
+CELERY_BROKER_URL = os.getenv("CELERY_BROKER_URL", REDIS_URL + '/0')
 # CELERY_RESULT_BACKEND = config.get('CELERY_RESULT_BACKEND', 'redis://redis:6379/0')
-CELERY_RESULT_BACKEND = os.getenv("CELERY_RESULT_BACKEND", 'redis://redis:6379/0')
+CELERY_RESULT_BACKEND = os.getenv("CELERY_RESULT_BACKEND", REDIS_URL + '/0')
 CELERY_ACCEPT_CONTENT = ['json']
 CELERY_TASK_SERIALIZER = 'json'
 CELERY_BEAT_SCHEDULER = 'django_celery_beat.schedulers.DatabaseScheduler'
@@ -139,13 +140,16 @@ DATABASES = {
     }
 }
 
+CACHE_LOCATION = f"{REDIS_URL}/1" # TODO: think it over
+
 CACHES = {
     'default': {
         'BACKEND': 'django_redis.cache.RedisCache',
-        'LOCATION': CELERY_BROKER_URL,
+        'LOCATION': CACHE_LOCATION,
         'OPTIONS': {
             'CLIENT_CLASS': 'django_redis.client.DefaultClient',
-        }
+        },
+        'TIMEOUT': None,
     }
 }
 
@@ -153,17 +157,16 @@ CACHES = {
 
 
 # Telegram bot api settings
-# BOT_DEFAULT_COUNTDOWN = config.get('BOT_DEFAULT_COUNTDOWN', 100)
-BOT_DEFAULT_COUNTDOWN = int(os.getenv("BOT_DEFAULT_COUNTDOWN", 60))
+# takes MINUTES:SECONDS
+BOT_DEFAULT_COUNTDOWN = os.getenv("BOT_DEFAULT_COUNTDOWN", "3:00")
 
 # BOT_API_TOKEN = config.get('BOT_API_TOKEN')
 BOT_API_TOKEN = os.getenv("BOT_API_TOKEN")
 
-# BOT_START_SENDING_HOUR = config.get('BOT_START_SENDING_HOUR')
-BOT_START_SENDING_HOUR = int(os.getenv("BOT_START_SENDING_HOUR", 8))
 
-# BOT_END_SENDING_HOUR = config.get('BOT_END_SENDING_HOUR')
-BOT_END_SENDING_HOUR = int(os.getenv("BOT_END_SENDING_HOUR", 23))
+# takes HOUR:MINUTE
+BOT_START_SENDING_TIME = os.getenv("BOT_START_SENDING_TIME", "8:00")
+BOT_END_SENDING_TIME = os.getenv("BOT_END_SENDING_TIME", "23:00")
 
 
 # Password validation
