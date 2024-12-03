@@ -55,18 +55,44 @@ LANGUAGE = "ru"
 dp = Dispatcher()
 
 class ButtonAction():
-    def __init__(self, title, inline=False, eng=None, rus=None, callback_name=None, *args, **kwargs):
+    def __init__(
+        self, title, inline=False, 
+        eng=None, rus=None, callback_name=None, 
+        takes_callback_query=False, *args, **kwargs):
+
         self.title = title
         self._eng = eng
         self._rus = rus
         self._inline = inline
         self._callback_name = callback_name
+        self._takes_callback_query = takes_callback_query
+
 
     def get_text(self):
         if LANGUAGE == "ru":
             return self._rus
         else:
             return self._eng
+
+
+    async def run(self, callback_query:CallbackQuery|Message, state:FSMContext, *args, **kwargs):
+        callback = globals().get(self._callback_name)
+
+        if callback and callable(callback):
+            if self._takes_callback_query and isinstance(callback_query, CallbackQuery):
+                await callback(callback_query, state, *args, **kwargs)
+            else:
+                if isinstance(callback_query, CallbackQuery):
+                    await callback(callback_query.message, state, *args, **kwargs)
+                else:
+                    await callback(callback_query, state, *args, **kwargs)
+
+
+class MessageAction():
+    def __init__(self, title, callback_name=None, *args, **kwargs):
+        self.title = title
+        self._callback_name = callback_name
+
 
     async def run(self, *args, **kwargs):
         callback = globals().get(self._callback_name)
@@ -77,29 +103,39 @@ class ButtonAction():
 
 BUTTON_ACTIONS = {
     "start": ButtonAction("start", inline=True, rus="Start", callback_name="start_handler"),
-    "settings": ButtonAction("settings", inline=True, rus="Настройки", callback_name="go_to_settings"),
+    "settings": ButtonAction("settings", inline=True, rus="⚙Настройки⚙", callback_name="go_to_settings"),
     "pause_sending": ButtonAction("pause_sending", inline=True, rus="⛔Остановить рассылку⛔", callback_name="pause_sending"),
     "start_sending": ButtonAction("start_sending", inline=True, rus="🟢Начать рассылку🟢", callback_name="start_sending"),
     "groups": ButtonAction("groups", inline=True, rus="👨‍👨‍👦‍👦Группы👨‍👨‍👦‍👦", callback_name="groups_handler"),
     "timings": ButtonAction("timings", inline=True, rus="⌚Тайминги⌚", callback_name="timings_handler"),
-    "go_back": ButtonAction("go_back", inline=True, rus="🔙Назад🔙", callback_name="go_back_handler"),
+    "go_back": ButtonAction("go_back", inline=True, rus="🔙Назад🔙", callback_name="go_back_handler", takes_callback_query=True),
     "start_sending_option": ButtonAction("start_sending_option", inline=True, rus="Начало отправки", callback_name="start_sending_option"),
     "end_sending_option": ButtonAction("end_sending_option", inline=True, rus="Конец отправки", callback_name="end_sending_option"),
     "period_option": ButtonAction("period_option", inline=True, rus="Промежуток", callback_name="period_option"),
 }
 
+# HELPER FUNCTIONS
 async def update_actions_stack(state: FSMContext, action_name:str) -> None:
     data:dict = await state.get_data()
     if action_name not in BUTTON_ACTIONS: raise ValueError(f"There is no action with name {action_name}")
     actions_stack:list = data.get("actions_stack", [])
     actions_stack.append(action_name)
-    state.update_data(actions_stack=actions_stack)
+    await state.update_data(actions_stack=actions_stack)
 
-# async def pop_actions_stack(state: FSMContext, action_name:str) -> None:
+async def set_input_action(state: FSMContext, action_name:str):
+    await state.update_data(input_action=action_name)
+
+async def pop_actions_stack(state: FSMContext) -> str|None:
+    data:dict = await state.get_data()
+    actions_stack:list = data.get("actions_stack", [])
+    action_name:str = actions_stack.pop()
+    await state.update_data(actions_stack=actions_stack)
+    return action_name
+
 # BUTTON ACTIONS HANDLERS
 # ---------------------------------------------------------------------------------
 
-async def go_to_settings(callback_query: CallbackQuery, state: FSMContext):
+async def go_to_settings(message: Message, state: FSMContext):
     print("go_to_settings")
     keyboard = InlineKeyboardBuilder()
     keyboard.add(
@@ -110,14 +146,14 @@ async def go_to_settings(callback_query: CallbackQuery, state: FSMContext):
         InlineKeyboardButton(
             text=BUTTON_ACTIONS["go_back"].get_text(), callback_data="go_back"),
     )
-    await callback_query.message.edit_text(
+    await message.edit_text(
         text="Настройки бота", 
         reply_markup=keyboard.as_markup()
     )
     await update_actions_stack(state, "settings")
 
 
-async def pause_sending(callback_query: CallbackQuery, state: FSMContext):
+async def pause_sending(message: Message, state: FSMContext):
     print("pause_sending")
     BotSetting().set("start_sending", False)
     keyboard = InlineKeyboardBuilder()
@@ -128,13 +164,13 @@ async def pause_sending(callback_query: CallbackQuery, state: FSMContext):
             callback_data="start_sending"
         )
     )
-    await callback_query.message.edit_text(
+    await message.edit_text(
         text="Состояние рассылки: выключена", 
         reply_markup=keyboard.as_markup()
     )
 
 
-async def start_sending(callback_query: CallbackQuery, state: FSMContext):
+async def start_sending(message: Message, state: FSMContext):
     print("start_sending")
     BotSetting().set("start_sending", True)
     keyboard = InlineKeyboardBuilder()
@@ -145,20 +181,20 @@ async def start_sending(callback_query: CallbackQuery, state: FSMContext):
             callback_data="pause_sending"
         )
     )
-    await callback_query.message.edit_text(
+    await message.edit_text(
         text="Состояние рассылки: включена", 
         reply_markup=keyboard.as_markup()
     )
 
 
-async def groups_handler(callback_query: CallbackQuery, state: FSMContext):
+async def groups_handler(message: Message, state: FSMContext):
     # TODO: list of groups; pagination; next, back buttons
     print("groups_handler")
     return
     await update_actions_stack(state, "groups")
 
 
-async def timings_handler(callback_query: CallbackQuery, state: FSMContext):
+async def timings_handler(message: Message, state: FSMContext, updated=False):
     print("timings handler")
     keyboard = InlineKeyboardBuilder()
     keyboard.row(
@@ -178,73 +214,115 @@ async def timings_handler(callback_query: CallbackQuery, state: FSMContext):
     start_sending_time = BotSetting().get('start_sending_time', settings.BOT_START_SENDING_TIME)
     end_sending_time = BotSetting().get('end_sending_time', settings.BOT_END_SENDING_TIME)
     period_sending_time = BotSetting().get('period_sending_time', settings.BOT_DEFAULT_COUNTDOWN)
-    text = "Настройка таймингов\n"+\
+    text = "Настройка таймингов\n" if not updated else "Тайминги успешно обновлены!\n" +\
         f"Начало отправки: {start_sending_time}\n" +\
         f"Конец отправки: {end_sending_time}\n" +\
         f"Промежуток(пауза между отправками): {period_sending_time}\n"
-    await callback_query.message.edit_text(
-        text=text, 
-        reply_markup=keyboard.as_markup()
-    )
+    
+    if not updated:
+        await message.edit_text(
+            text=text, 
+            reply_markup=keyboard.as_markup()
+        )
+    else:
+        await message.answer(
+            text=text, 
+            reply_markup=keyboard.as_markup()
+        )
+
     await update_actions_stack(state, "timings")
 
 
-async def start_sending_option(callback_query: CallbackQuery, state: FSMContext):
+async def start_sending_option(message: Message, state: FSMContext, errors: list=None):
     print("start_sending_option")
     keyboard = InlineKeyboardBuilder()
     keyboard.add(
         InlineKeyboardButton(
             text=BUTTON_ACTIONS["go_back"].get_text(), callback_data="go_back")
     )
-    await callback_query.message.edit_text(
-        text="Введите время формата HH:ss (например, ввод `22:30` означает конец отправки в 22 часов 30 минут)", 
-        reply_markup=keyboard.as_markup()
-    )
+    
+    errors_str = "\n".join([error["message"] for error in errors]) if errors else ""
+    text=f"{errors_str}\nВведите время формата HH:ss " +\
+        "(например, ввод `8:30` означает старт в 8 часов 30 минут)"
+    
+    if not errors:
+        await message.edit_text(
+            text=text, 
+            reply_markup=keyboard.as_markup()
+        )
+    else:
+        await message.answer(
+            text=text, 
+            reply_markup=keyboard.as_markup()
+        )
     await update_actions_stack(state, "start_sending_option")
+    await set_input_action(state, "start_sending_time")
 
 
-async def end_sending_option(callback_query: CallbackQuery, state: FSMContext):
+async def end_sending_option(message: Message, state: FSMContext, errors: list=None):
     print("end_sending_option")
     keyboard = InlineKeyboardBuilder()
     keyboard.add(
         InlineKeyboardButton(
             text=BUTTON_ACTIONS["go_back"].get_text(), callback_data="go_back")
     )
-    await callback_query.message.edit_text(
-        text="Введите время формата HH:ss (например, ввод `8:30` означает старт в 8 часов 30 минут)", 
-        reply_markup=keyboard.as_markup()
-    )
+
+    errors_str = "\n".join([error["message"] for error in errors]) if errors else ""
+    text = f"{errors_str}\nВведите время формата HH:ss "+\
+        "(например, ввод `22:30` означает конец отправки в 22 часов 30 минут)"
+
+    if not errors:
+        await message.edit_text(
+            text=text, 
+            reply_markup=keyboard.as_markup()
+        )
+    else:
+        await message.answer(
+            text=text, 
+            reply_markup=keyboard.as_markup()
+        )
     await update_actions_stack(state, "end_sending_option")
+    await set_input_action(state, "end_sending_time")
 
 
-async def period_option(callback_query: CallbackQuery, state: FSMContext):
+async def period_option(message: Message, state: FSMContext, errors: list=None):
     print("period_option")
     keyboard = InlineKeyboardBuilder()
     keyboard.add(
         InlineKeyboardButton(
             text=BUTTON_ACTIONS["go_back"].get_text(), callback_data="go_back")
     )
-    await callback_query.message.edit_text(
-        text="Введите время формата mm:ss (например, ввод `5:30` означает обновление раз в 5 минут 30 секунд)", 
-        reply_markup=keyboard.as_markup()
-    )
+
+    errors_str = "\n".join([error["message"] for error in errors]) if errors else ""
+    text=f"{errors_str}\nВведите время формата mm:ss " +\
+        "(например, ввод `5:30` означает обновление раз в 5 минут 30 секунд)"
+
+    if not errors:
+        await message.edit_text(
+            text=text, 
+            reply_markup=keyboard.as_markup()
+        )
+    else:
+        await message.answer(
+            text=text, 
+            reply_markup=keyboard.as_markup()
+        )
+
     await update_actions_stack(state, "period_option")
+    await set_input_action(state, "period_time")
 
 
 async def go_back_handler(callback_query: CallbackQuery, state: FSMContext):
-    print("go_back_handler")
     data = await state.get_data()
     actions_stack = data.get("actions_stack")
     print('actions_stack: ', actions_stack)
     actions_stack.pop()
     await state.update_data(go_back_called=True)
+    await state.update_data(input_action=None)
     await BUTTON_ACTIONS[actions_stack.pop()].run(callback_query, state)
 
 
-async def start_handler(message: Message|CallbackQuery, state: FSMContext):
-    if isinstance(message, CallbackQuery):
-        message:Message = message.message
-
+async def start_handler(message: Message, state: FSMContext):
     if message.chat.type != ChatType.PRIVATE:
         return
 
@@ -300,7 +378,6 @@ async def button_actions_handler(message: Message):
     await message.delete()
 
 
-
 # @dp.message(lambda message: message.forward_date is not None)
 # @dp.message(lambda message: message.caption is not None)
 
@@ -348,6 +425,81 @@ async def forward_message_handler(message: Message):
         # await send_message_async(media_list, caption)
         add_task_to_queue(media_list, caption, message.chat.id, message_ids)
 
+
+# MESSAGE ACTIONS HANDLERS
+# ---------------------------------------------------------------------------------
+MESSAGE_ACTIONS = {
+    "start_sending_time": MessageAction("start_sending_time", "start_sending_input_handler"),
+    "end_sending_time": MessageAction("start_sending_time", "end_sending_input_handler"),
+    "period_time": MessageAction("start_sending_time", "period_input_handler"),
+}
+
+def is_valid_time(time_str: str) -> bool:
+    try:
+        hours, minutes = map(int, time_str.split(":"))
+        return 0 <= hours <= 23 and 0 <= minutes <= 59
+    except (ValueError, AttributeError):
+        return False
+
+def is_valid_period(time_str: str) -> bool:
+    try:
+        minutes, seconds = map(int, time_str.split(":"))
+        return (0 <= minutes <= 59) and (0 <= seconds <= 59)
+    except (ValueError, AttributeError):
+        return False
+
+async def start_sending_input_handler(message: Message, state: FSMContext):
+    input_text = message.text.strip().replace(" ", "")
+    
+    if not is_valid_time(input_text):
+        errors = [{message: "Некорректный формат ввода, попробуйте еще раз"}]
+        return await BUTTON_ACTIONS[await pop_actions_stack(state)].run(message, state, errors)
+    
+    BotSetting().set("start_sending_time", input_text)
+
+    await pop_actions_stack(state)
+    await BUTTON_ACTIONS[await pop_actions_stack(state)]\
+        .run(message, state, updated=True)
+
+
+async def end_sending_input_handler(message: Message, state: FSMContext):
+    input_text = message.text.strip().replace(" ", "")
+    
+    if not is_valid_time(input_text):
+        errors = [{message: "Некорректный формат ввода, попробуйте еще раз"}]
+        return await BUTTON_ACTIONS[await pop_actions_stack(state)].run(message, state, errors)
+    
+    BotSetting().set("end_sending_time", input_text)
+    
+    await pop_actions_stack(state)
+    await BUTTON_ACTIONS[await pop_actions_stack(state)]\
+        .run(message, state, updated=True)
+
+
+async def period_input_handler(message: Message, state: FSMContext):
+    input_text = message.text.strip().replace(" ", "")
+    
+    if not is_valid_period(input_text):
+        errors = [{message: "Некорректный формат ввода, попробуйте еще раз"}]
+        return await BUTTON_ACTIONS[await pop_actions_stack(state)].run(message, state, errors)
+    
+    BotSetting().set("period_sending_time", input_text)
+    
+    await pop_actions_stack(state)
+    await BUTTON_ACTIONS[await pop_actions_stack(state)]\
+        .run(message, state, updated=True)
+
+# ---------------------------------------------------------------------------------
+
+
+@dp.message()
+async def message_main_handler(message: Message, state: FSMContext):
+    data = await state.get_data()
+    input_action:str = data.get("input_action")
+    if not input_action: return
+    await MESSAGE_ACTIONS[input_action].run(message, state)
+    await state.update_data(input_action=None)
+# ---------------------------------------------------------------------------------
 
 async def main() -> None:
     # Initialize Bot instance with default bot properties which will be passed to all API calls
