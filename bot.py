@@ -174,8 +174,15 @@ async def timings_handler(callback_query: CallbackQuery, state: FSMContext):
         InlineKeyboardButton(
             text=BUTTON_ACTIONS["go_back"].get_text(), callback_data="go_back"),
     )
+    start_sending_time = BotSetting().get('start_sending_time', settings.BOT_START_SENDING_TIME)
+    end_sending_time = BotSetting().get('end_sending_time', settings.BOT_END_SENDING_TIME)
+    period_sending_time = BotSetting().get('period_sending_time', settings.BOT_DEFAULT_COUNTDOWN)
+    text = "Настройка таймингов\n"+\
+        f"Начало отправки: {start_sending_time}\n" +\
+        f"Конец отправки: {end_sending_time}\n" +\
+        f"Промежуток(пауза между отправками): {period_sending_time}\n"
     await callback_query.message.edit_text(
-        text="Настройка таймингов", 
+        text=text, 
         reply_markup=keyboard.as_markup()
     )
     await update_actions_stack(state, "timings")
