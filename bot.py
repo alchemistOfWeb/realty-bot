@@ -95,6 +95,7 @@ async def update_actions_stack(state: FSMContext, action_name:str) -> None:
     actions_stack.append(action_name)
     state.update_data(actions_stack=actions_stack)
 
+# async def pop_actions_stack(state: FSMContext, action_name:str) -> None:
 # BUTTON ACTIONS HANDLERS
 # ---------------------------------------------------------------------------------
 
@@ -190,19 +191,43 @@ async def timings_handler(callback_query: CallbackQuery, state: FSMContext):
 
 async def start_sending_option(callback_query: CallbackQuery, state: FSMContext):
     print("start_sending_option")
-    return
+    keyboard = InlineKeyboardBuilder()
+    keyboard.add(
+        InlineKeyboardButton(
+            text=BUTTON_ACTIONS["go_back"].get_text(), callback_data="go_back")
+    )
+    await callback_query.message.edit_text(
+        text="Введите время формата HH:ss (например, ввод `22:30` означает конец отправки в 22 часов 30 минут)", 
+        reply_markup=keyboard.as_markup()
+    )
     await update_actions_stack(state, "start_sending_option")
 
 
 async def end_sending_option(callback_query: CallbackQuery, state: FSMContext):
     print("end_sending_option")
-    return
+    keyboard = InlineKeyboardBuilder()
+    keyboard.add(
+        InlineKeyboardButton(
+            text=BUTTON_ACTIONS["go_back"].get_text(), callback_data="go_back")
+    )
+    await callback_query.message.edit_text(
+        text="Введите время формата HH:ss (например, ввод `8:30` означает старт в 8 часов 30 минут)", 
+        reply_markup=keyboard.as_markup()
+    )
     await update_actions_stack(state, "end_sending_option")
 
 
 async def period_option(callback_query: CallbackQuery, state: FSMContext):
     print("period_option")
-    return
+    keyboard = InlineKeyboardBuilder()
+    keyboard.add(
+        InlineKeyboardButton(
+            text=BUTTON_ACTIONS["go_back"].get_text(), callback_data="go_back")
+    )
+    await callback_query.message.edit_text(
+        text="Введите время формата mm:ss (например, ввод `5:30` означает обновление раз в 5 минут 30 секунд)", 
+        reply_markup=keyboard.as_markup()
+    )
     await update_actions_stack(state, "period_option")
 
 
