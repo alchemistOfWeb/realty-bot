@@ -154,15 +154,11 @@ CACHES = {
 }
 
 
-
-
 # Telegram bot api settings
-# takes MINUTES:SECONDS
-BOT_DEFAULT_COUNTDOWN = os.getenv("BOT_DEFAULT_COUNTDOWN", "3:00")
-
-# BOT_API_TOKEN = config.get('BOT_API_TOKEN')
 BOT_API_TOKEN = os.getenv("BOT_API_TOKEN")
 
+# takes MINUTES:SECONDS
+BOT_DEFAULT_COUNTDOWN = os.getenv("BOT_DEFAULT_COUNTDOWN", "3:00")
 
 # takes HOUR:MINUTE
 BOT_START_SENDING_TIME = os.getenv("BOT_START_SENDING_TIME", "8:00")
