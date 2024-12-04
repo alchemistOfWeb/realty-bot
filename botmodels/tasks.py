@@ -21,7 +21,7 @@ from aiogram.enums import ParseMode
 from aiogram.types import InputMediaPhoto, InputMedia
 from aiogram.utils.media_group import MediaGroupBuilder
 
-
+# BotSetting().get("do_sending")
 logger = get_task_logger(__name__)
 LAST_TASK_CACHE_KEY = 'last_task_eta'
 
@@ -72,10 +72,16 @@ def send_message_to_groups(
 
 
 def get_next_task_eta():
-    now = datetime.datetime.now(pytz.timezone('Asia/Yerevan'))  # TODO: Incapsulate getting hours/minutes
-    hour, minute = settings.BOT_START_SENDING_TIME.split(':')
+    now:datetime.datetime = datetime.datetime.now(pytz.timezone('Asia/Yerevan'))  # TODO: Incapsulate getting hours/minutes
+    
+    hour, minute = BotSetting()\
+        .get("start_sending_time", settings.BOT_START_SENDING_TIME).split(':')
+
     start_time = now.replace(hour=int(hour), minute=int(minute), second=0)
-    hour, minute = settings.BOT_END_SENDING_TIME.split(':')
+
+    hour, minute = BotSetting()\
+        .get("end_sending_time", settings.BOT_END_SENDING_TIME).split(':')
+
     end_time = now.replace(hour=int(hour), minute=int(minute), second=0)
 
     last_task_eta = BotSetting().get(LAST_TASK_CACHE_KEY)
@@ -83,8 +89,13 @@ def get_next_task_eta():
     if not last_task_eta:
         last_task_eta = start_time if now < start_time else now
     else:
-        last_task_eta = datetime.datetime.fromisoformat(last_task_eta)
-        minutes, seconds = settings.BOT_DEFAULT_COUNTDOWN.split(':')
+        last_task_eta:datetime.datetime = datetime.datetime.fromisoformat(last_task_eta)
+        minutes, seconds = BotSetting().\
+            get("period_sending_time", settings.BOT_DEFAULT_COUNTDOWN).split(':')
+        
+        if last_task_eta < now:
+            last_task_eta = now
+            
         next_eta = last_task_eta + datetime.timedelta(minutes=int(minutes), seconds=int(seconds))
 
         if next_eta >= end_time:

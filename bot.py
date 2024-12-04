@@ -160,7 +160,7 @@ async def go_to_settings(message: Message, state: FSMContext):
 
 
 async def pause_sending(message: Message, state: FSMContext):
-    BotSetting().set("start_sending", False)
+    BotSetting().set("do_sending", False)
     keyboard = InlineKeyboardBuilder()
     keyboard.add(
         InlineKeyboardButton(text=BUTTON_ACTIONS["settings"].get_text(), callback_data="settings"),
@@ -176,7 +176,7 @@ async def pause_sending(message: Message, state: FSMContext):
 
 
 async def start_sending(message: Message, state: FSMContext):
-    BotSetting().set("start_sending", True)
+    BotSetting().set("do_sending", True)
     keyboard = InlineKeyboardBuilder()
     keyboard.add(
         InlineKeyboardButton(text=BUTTON_ACTIONS["settings"].get_text(), callback_data="settings"),
@@ -357,10 +357,11 @@ async def go_back_handler(callback_query: CallbackQuery, state: FSMContext):
 
 
 async def start_handler(message: Message, state: FSMContext):
-    pause_sending = BotSetting().get("start_sending", False)
+    pause_sending = BotSetting().get("do_sending", False)
 
     data = await state.get_data()
     go_back_called = data.get("go_back_called", False)
+    await state.update_data(go_back_called=False)
     await state.update_data(actions_stack=[])
 
     keyboard = InlineKeyboardBuilder()
