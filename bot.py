@@ -541,14 +541,14 @@ async def period_input_handler(message: Message, state: FSMContext):
 
 @dp.message()
 async def message_main_handler(message: Message, state: FSMContext):
-    if message.chat.type != ChatType.PRIVATE: return
-
+    print("MESSAGE_TYPE: ", message.chat.type)
     if message.chat.type in {"group", "supergroup"}:
+        print("TRY TO CREATE NEW GROUP: ", message.chat)
         group_id = message.chat.id
         cached_groups:list = cache.get("bot_groups_ids", list())
         if group_id in cached_groups: return
 
-        new_group, created = GroupProfile.objects.update_or_create(
+        new_group, created = await GroupProfile.objects.aupdate_or_create(
             chat_id=group_id,
             defaults={
                 "group_name": message.chat.title
@@ -560,6 +560,8 @@ async def message_main_handler(message: Message, state: FSMContext):
         cache.set("bot_groups_ids", cached_groups, timeout=constants.CACHE_TIMEOUT_DAY)
         return
     
+    if message.chat.type != ChatType.PRIVATE: return
+
     data = await state.get_data()
     input_action:str = data.get("input_action")
     if not input_action: return

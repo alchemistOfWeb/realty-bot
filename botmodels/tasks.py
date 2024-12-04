@@ -7,6 +7,8 @@ import asyncio
 import time
 import datetime
 import pytz
+from typing import List
+from asgiref.sync import sync_to_async
 
 # django
 from django.conf import settings
@@ -37,11 +39,10 @@ async def send_message_async(
     with user after sending post to groups
     """
 
-    bot = Bot(token=settings.BOT_API_TOKEN, default=DefaultBotProperties(parse_mode=ParseMode.HTML))
+    bot:Bot = Bot(token=settings.BOT_API_TOKEN, default=DefaultBotProperties(parse_mode=ParseMode.HTML))
     
-    # groups = GroupProfile.objects.all()
-
-    groups = [-1002320898941]
+    groups:List[GroupProfile] = \
+        await sync_to_async(list)(GroupProfile.objects.filter(deleted=False, active=True))
     
     for group in groups:
         try:
@@ -50,12 +51,13 @@ async def send_message_async(
             for media in media_list:
                 media_group.add_photo(media)
 
-            await bot.send_media_group(chat_id=group, media=media_group.build())
-            if bot_chat_id and message_ids:
-                await bot.delete_messages(bot_chat_id, message_ids)
+            await bot.send_media_group(chat_id=group.chat_id, media=media_group.build())
 
         except Exception as e:
-            print(f"Error of sending message to the group {group}: {e}")
+            print(f"Error of sending message to the group {group.chat_id}: {e}")
+
+    if bot_chat_id and message_ids:
+        await bot.delete_messages(bot_chat_id, message_ids)
 
 
 @shared_task(bind=True)
@@ -90,12 +92,12 @@ def get_next_task_eta():
         last_task_eta = start_time if now < start_time else now
     else:
         last_task_eta:datetime.datetime = datetime.datetime.fromisoformat(last_task_eta)
-        minutes, seconds = BotSetting().\
-            get("period_sending_time", settings.BOT_DEFAULT_COUNTDOWN).split(':')
+        minutes, seconds = BotSetting()\
+            .get("period_sending_time", settings.BOT_DEFAULT_COUNTDOWN).split(':')
         
         if last_task_eta < now:
             last_task_eta = now
-            
+
         next_eta = last_task_eta + datetime.timedelta(minutes=int(minutes), seconds=int(seconds))
 
         if next_eta >= end_time:
