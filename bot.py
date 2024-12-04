@@ -143,7 +143,6 @@ async def pop_actions_stack(state: FSMContext) -> str|None:
 # ---------------------------------------------------------------------------------
 
 async def go_to_settings(message: Message, state: FSMContext):
-    print("go_to_settings")
     keyboard = InlineKeyboardBuilder()
     keyboard.add(
         InlineKeyboardButton(
@@ -161,7 +160,6 @@ async def go_to_settings(message: Message, state: FSMContext):
 
 
 async def pause_sending(message: Message, state: FSMContext):
-    print("pause_sending")
     BotSetting().set("start_sending", False)
     keyboard = InlineKeyboardBuilder()
     keyboard.add(
@@ -178,7 +176,6 @@ async def pause_sending(message: Message, state: FSMContext):
 
 
 async def start_sending(message: Message, state: FSMContext):
-    print("start_sending")
     BotSetting().set("start_sending", True)
     keyboard = InlineKeyboardBuilder()
     keyboard.add(
@@ -196,14 +193,11 @@ async def start_sending(message: Message, state: FSMContext):
 
 async def groups_handler(message: Message, state: FSMContext):
     keyboard = InlineKeyboardBuilder()
-
-    # script to add all new groups which bot was added in:
-    
     groups = await sync_to_async(list)(GroupProfile.objects.filter(deleted=False))
-    print(groups)
     
     for group in groups:
         status_symbol:str = '🟩' if group.active else '🟥'
+        print("GROUPS_LIST")
         print(group.id, group.chat_id, group.group_name)
         keyboard.row(
             InlineKeyboardButton(
@@ -218,7 +212,7 @@ async def groups_handler(message: Message, state: FSMContext):
 
     text:str = "🟩 - значит группа активна и в неё идет рассылка\n"+\
         "🟥- рассылка приостановлена\n\n"+\
-        "Нажав на кнопку с название группы вы изменяете данный статус"
+        "Нажав на кнопку с названием группы вы изменяете данный статус"
     
     await message.edit_text(
         text=text,
@@ -228,10 +222,10 @@ async def groups_handler(message: Message, state: FSMContext):
 
 
 async def group_choice_handler(message: Message, state: FSMContext, action_id:str):
-    group = GroupProfile.objects.filter(id=int(action_id)).first()
+    group = await sync_to_async(GroupProfile.objects.get)(id=int(action_id))
     group.active = not group.active
-    group.save()
-    BUTTON_ACTIONS[await pop_actions_stack()].run(message, state)
+    await sync_to_async(group.save)()
+    await BUTTON_ACTIONS[await pop_actions_stack(state)].run(message, state)
 
 
 
@@ -240,7 +234,6 @@ async def add_group_handler(message: Message, state: FSMContext):
 
 
 async def timings_handler(message: Message, state: FSMContext, updated=False):
-    print("timings handler")
     keyboard = InlineKeyboardBuilder()
     keyboard.row(
         InlineKeyboardButton(
@@ -279,7 +272,6 @@ async def timings_handler(message: Message, state: FSMContext, updated=False):
 
 
 async def start_sending_option(message: Message, state: FSMContext, errors: list=None):
-    print("start_sending_option")
     keyboard = InlineKeyboardBuilder()
     keyboard.add(
         InlineKeyboardButton(
@@ -305,7 +297,6 @@ async def start_sending_option(message: Message, state: FSMContext, errors: list
 
 
 async def end_sending_option(message: Message, state: FSMContext, errors: list=None):
-    print("end_sending_option")
     keyboard = InlineKeyboardBuilder()
     keyboard.add(
         InlineKeyboardButton(
@@ -331,7 +322,6 @@ async def end_sending_option(message: Message, state: FSMContext, errors: list=N
 
 
 async def period_option(message: Message, state: FSMContext, errors: list=None):
-    print("period_option")
     keyboard = InlineKeyboardBuilder()
     keyboard.add(
         InlineKeyboardButton(
@@ -360,7 +350,6 @@ async def period_option(message: Message, state: FSMContext, errors: list=None):
 async def go_back_handler(callback_query: CallbackQuery, state: FSMContext):
     data = await state.get_data()
     actions_stack = data.get("actions_stack")
-    print('actions_stack: ', actions_stack)
     actions_stack.pop()
     await state.update_data(go_back_called=True)
     await state.update_data(input_action=None)
@@ -405,7 +394,7 @@ async def start_handler(message: Message, state: FSMContext):
 
 # ---------------------------------------------------------------------------------
 
-@dp.callback_query(lambda callback_query: callback_query.data in BUTTON_ACTIONS.keys())
+@dp.callback_query()
 async def button_inline_actions_handler(callback_query: CallbackQuery, state: FSMContext):
     if callback_query.message.chat.type != ChatType.PRIVATE: return
     data:list = callback_query.data.split('%')
@@ -414,7 +403,9 @@ async def button_inline_actions_handler(callback_query: CallbackQuery, state: FS
     if len(data) > 1:
         action_id = data[1]
     
-    btn_action:ButtonAction = BUTTON_ACTIONS[action_name]
+    btn_action:ButtonAction = BUTTON_ACTIONS.get(action_name)
+    if not btn_action: return
+
     if action_id:
         await btn_action.run(callback_query, state, action_id=action_id)
     else:
