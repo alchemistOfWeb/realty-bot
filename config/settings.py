@@ -129,29 +129,41 @@ DATABASE_USER = os.getenv("POSTGRES_USER")
 # DATABASE_PASSWORD = config.get('POSTGRES_PASSWORD', "django_password")
 DATABASE_PASSWORD = os.getenv("POSTGRES_PASSWORD")
 
-DATABASES = {
-    'default': {
-        'ENGINE': 'django.db.backends.postgresql',
-        'NAME': DATABASE_NAME,
-        'USER': DATABASE_USER,
-        'PASSWORD': DATABASE_PASSWORD,
-        'HOST': DATABASE_HOST,
-        'PORT': DATABASE_PORT,
+DEV_WITHOUT_DOCKER = os.getenv("DEV_WITHOUT_DOCKER", "True") == "True"
+
+if not DEV_WITHOUT_DOCKER:
+    DATABASES = {
+        'default': {
+            'ENGINE': 'django.db.backends.postgresql',
+            'NAME': DATABASE_NAME,
+            'USER': DATABASE_USER,
+            'PASSWORD': DATABASE_PASSWORD,
+            'HOST': DATABASE_HOST,
+            'PORT': DATABASE_PORT,
+        }
     }
-}
+else:
+    DATABASES = {
+        'default': {
+            'ENGINE': 'django.db.backends.sqlite3',
+            'NAME': "db.sqlite3"
+        }
+    }
 
 CACHE_LOCATION = f"{REDIS_URL}/1" # TODO: think it over
 
-CACHES = {
-    'default': {
-        'BACKEND': 'django_redis.cache.RedisCache',
-        'LOCATION': CACHE_LOCATION,
-        'OPTIONS': {
-            'CLIENT_CLASS': 'django_redis.client.DefaultClient',
-        },
-        'TIMEOUT': None,
+if not DEV_WITHOUT_DOCKER:
+    CACHES = {
+        'default': {
+            'BACKEND': 'django_redis.cache.RedisCache',
+            'LOCATION': CACHE_LOCATION,
+            'OPTIONS': {
+                'CLIENT_CLASS': 'django_redis.client.DefaultClient',
+            },
+            'TIMEOUT': None,
+        }
     }
-}
+
 
 
 # Telegram bot api settings

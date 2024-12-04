@@ -1,6 +1,3 @@
-# django modules
-import asyncio
-import django
 
 # python built-in modules
 from collections import defaultdict
@@ -10,10 +7,17 @@ import logging
 import sys
 import os
 
+# django modules
+import asyncio
+import django
+from django.db import IntegrityError
+from django.core.cache import cache
+from asgiref.sync import sync_to_async
+
 os.environ.setdefault('DJANGO_SETTINGS_MODULE', 'config.settings')
 django.setup()
-
 from django.conf import settings
+
 
 # third-party modules
 from dotenv import dotenv_values
@@ -31,7 +35,8 @@ from aiogram.utils.keyboard import (
 
 from aiogram.types import (
     Message, InputFile, FSInputFile, InlineKeyboardMarkup, 
-    InlineKeyboardButton, CallbackQuery, InputMediaPhoto
+    InlineKeyboardButton, CallbackQuery, InputMediaPhoto,
+    ChatMemberUpdated
 )
 
 from aiogram.fsm.context import FSMContext
@@ -39,8 +44,8 @@ from magic_filter import F
 
 # handmade modules
 from botmodels.tasks import send_message_to_groups, send_message_async, add_task_to_queue
-from botmodels.models import BotSetting
-
+from botmodels.models import BotSetting, GroupProfile
+import constants
 # from botmodels.models import UserProfile
 # import texts # mesage-templates
 
@@ -112,6 +117,8 @@ BUTTON_ACTIONS = {
     "start_sending_option": ButtonAction("start_sending_option", inline=True, rus="Начало отправки", callback_name="start_sending_option"),
     "end_sending_option": ButtonAction("end_sending_option", inline=True, rus="Конец отправки", callback_name="end_sending_option"),
     "period_option": ButtonAction("period_option", inline=True, rus="Промежуток", callback_name="period_option"),
+    "group_choice": ButtonAction("group_choice", inline=True, rus="Промежуток", callback_name="group_choice_handler"),
+    "add_group": ButtonAction("add_group", inline=True, rus="Промежуток", callback_name="add_group_handler"),
 }
 
 # HELPER FUNCTIONS
@@ -188,10 +195,48 @@ async def start_sending(message: Message, state: FSMContext):
 
 
 async def groups_handler(message: Message, state: FSMContext):
-    # TODO: list of groups; pagination; next, back buttons
-    print("groups_handler")
-    return
+    keyboard = InlineKeyboardBuilder()
+
+    # script to add all new groups which bot was added in:
+    
+    groups = await sync_to_async(list)(GroupProfile.objects.filter(deleted=False))
+    print(groups)
+    
+    for group in groups:
+        status_symbol:str = '🟩' if group.active else '🟥'
+        print(group.id, group.chat_id, group.group_name)
+        keyboard.row(
+            InlineKeyboardButton(
+                text=f"{status_symbol}{group.group_name}", 
+                callback_data=f"group_choice%{group.id}")
+        )
+
+    keyboard.row(
+        InlineKeyboardButton(
+            text=BUTTON_ACTIONS["go_back"].get_text(), callback_data="go_back")
+    )
+
+    text:str = "🟩 - значит группа активна и в неё идет рассылка\n"+\
+        "🟥- рассылка приостановлена\n\n"+\
+        "Нажав на кнопку с название группы вы изменяете данный статус"
+    
+    await message.edit_text(
+        text=text,
+        reply_markup=keyboard.as_markup()
+    )
     await update_actions_stack(state, "groups")
+
+
+async def group_choice_handler(message: Message, state: FSMContext, action_id:str):
+    group = GroupProfile.objects.filter(id=int(action_id)).first()
+    group.active = not group.active
+    group.save()
+    BUTTON_ACTIONS[await pop_actions_stack()].run(message, state)
+
+
+
+async def add_group_handler(message: Message, state: FSMContext):
+    ... # I think we dont need it
 
 
 async def timings_handler(message: Message, state: FSMContext, updated=False):
@@ -214,7 +259,7 @@ async def timings_handler(message: Message, state: FSMContext, updated=False):
     start_sending_time = BotSetting().get('start_sending_time', settings.BOT_START_SENDING_TIME)
     end_sending_time = BotSetting().get('end_sending_time', settings.BOT_END_SENDING_TIME)
     period_sending_time = BotSetting().get('period_sending_time', settings.BOT_DEFAULT_COUNTDOWN)
-    text = "Настройка таймингов\n" if not updated else "Тайминги успешно обновлены!\n" +\
+    text = ("Настройка таймингов\n" if not updated else "Тайминги успешно обновлены!\n") +\
         f"Начало отправки: {start_sending_time}\n" +\
         f"Конец отправки: {end_sending_time}\n" +\
         f"Промежуток(пауза между отправками): {period_sending_time}\n"
@@ -323,9 +368,6 @@ async def go_back_handler(callback_query: CallbackQuery, state: FSMContext):
 
 
 async def start_handler(message: Message, state: FSMContext):
-    if message.chat.type != ChatType.PRIVATE:
-        return
-
     pause_sending = BotSetting().get("start_sending", False)
 
     data = await state.get_data()
@@ -344,16 +386,18 @@ async def start_handler(message: Message, state: FSMContext):
                 callback_data="start_sending"
                 )
     )
+
+    period:str = BotSetting().get("period_sending_time", settings.BOT_DEFAULT_COUNTDOWN)
     if go_back_called:
         await message.edit_text(
             f"Здравствуйте, {html.bold(message.from_user.full_name)}!\n" +\
-            f"Данный бот обрабатывает пересылаемые сообщения и рассылает их раз в {settings.BOT_DEFAULT_COUNTDOWN} минут",
+            f"Данный бот обрабатывает пересылаемые сообщения и рассылает их раз в {period} минут",
             reply_markup=keyboard.as_markup()
         )
     else:
         await message.answer(
             f"Здравствуйте, {html.bold(message.from_user.full_name)}!\n" +\
-            f"Данный бот обрабатывает пересылаемые сообщения и рассылает их раз в {settings.BOT_DEFAULT_COUNTDOWN} минут",
+            f"Данный бот обрабатывает пересылаемые сообщения и рассылает их раз в {period} минут",
             reply_markup=keyboard.as_markup()
         )
 
@@ -363,8 +407,18 @@ async def start_handler(message: Message, state: FSMContext):
 
 @dp.callback_query(lambda callback_query: callback_query.data in BUTTON_ACTIONS.keys())
 async def button_inline_actions_handler(callback_query: CallbackQuery, state: FSMContext):
-    btn_action = BUTTON_ACTIONS[callback_query.data]
-    await btn_action.run(callback_query, state)
+    if callback_query.message.chat.type != ChatType.PRIVATE: return
+    data:list = callback_query.data.split('%')
+    action_name:str = data[0]
+    action_id:str = None
+    if len(data) > 1:
+        action_id = data[1]
+    
+    btn_action:ButtonAction = BUTTON_ACTIONS[action_name]
+    if action_id:
+        await btn_action.run(callback_query, state, action_id=action_id)
+    else:
+        await btn_action.run(callback_query, state)
 
 
 BUTTON_ACTIONS_SEARCH_DICT = {
@@ -373,6 +427,7 @@ BUTTON_ACTIONS_SEARCH_DICT = {
 
 @dp.message(lambda message: message.text in BUTTON_ACTIONS_SEARCH_DICT.keys())
 async def button_actions_handler(message: Message):
+    if message.chat.type != ChatType.PRIVATE: return
     btn_action = BUTTON_ACTIONS_SEARCH_DICT[message.text]
     await btn_action.run(message)
     await message.delete()
@@ -391,14 +446,14 @@ async def command_start_handler(message: Message, state: FSMContext) -> None:
     This handler receives messages with `/start` command
     TODO: must work only for admins in their individual chats
     """
+    if message.chat.type != ChatType.PRIVATE: return
     await start_handler(message, state)
 
 
 @dp.message(lambda message: message.forward_date is not None)
 async def forward_message_handler(message: Message):
     # print(str(message) + "\n" + ("-"*80) + "\n")
-    if message.chat.type != ChatType.PRIVATE:
-        return
+    if message.chat.type != ChatType.PRIVATE: return
 
     media_group_id = message.media_group_id
     media_groups_cache[media_group_id].append(message)
@@ -494,12 +549,44 @@ async def period_input_handler(message: Message, state: FSMContext):
 
 @dp.message()
 async def message_main_handler(message: Message, state: FSMContext):
+    if message.chat.type != ChatType.PRIVATE: return
+
+    if message.chat.type in {"group", "supergroup"}:
+        group_id = message.chat.id
+        cached_groups:list = cache.get("bot_groups_ids", list())
+        if group_id in cached_groups: return
+
+        new_group, created = GroupProfile.objects.update_or_create(
+            chat_id=group_id,
+            defaults={
+                "group_name": message.chat.title
+            }
+        )
+        print("GROUP CREATED: ", created)
+        cached_groups = cached_groups.append(new_group)
+        
+        cache.set("bot_groups_ids", cached_groups, timeout=constants.CACHE_TIMEOUT_DAY)
+        return
+    
     data = await state.get_data()
     input_action:str = data.get("input_action")
     if not input_action: return
     await MESSAGE_ACTIONS[input_action].run(message, state)
     await state.update_data(input_action=None)
 # ---------------------------------------------------------------------------------
+
+@dp.chat_member(ChatMemberUpdated)
+async def handle_bot_left_group(event: ChatMemberUpdated):
+    if event.new_chat_member.status == "left" and event.new_chat_member.user.id == event.bot.id:
+        group_id = event.chat.id
+        try:
+            group = GroupProfile.objects.get(chat_id=group_id)
+            group.active = False
+            group.deleted = True
+            group.save()
+        except GroupProfile.DoesNotExist:
+            pass
+
 
 async def main() -> None:
     # Initialize Bot instance with default bot properties which will be passed to all API calls
