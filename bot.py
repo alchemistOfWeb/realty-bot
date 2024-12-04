@@ -129,8 +129,10 @@ async def update_actions_stack(state: FSMContext, action_name:str) -> None:
     actions_stack.append(action_name)
     await state.update_data(actions_stack=actions_stack)
 
+
 async def set_input_action(state: FSMContext, action_name:str):
     await state.update_data(input_action=action_name)
+
 
 async def pop_actions_stack(state: FSMContext) -> str|None:
     data:dict = await state.get_data()
@@ -138,6 +140,25 @@ async def pop_actions_stack(state: FSMContext) -> str|None:
     action_name:str = actions_stack.pop()
     await state.update_data(actions_stack=actions_stack)
     return action_name
+
+
+async def update_groups(message: Message) -> None:
+    print("TRY TO CREATE NEW GROUP: ", message.chat)
+    group_id = message.chat.id
+    cached_groups:list = cache.get("bot_groups_ids") or []
+    if group_id in cached_groups: return
+
+    new_group, created = await GroupProfile.objects.aupdate_or_create(
+        chat_id=group_id,
+        defaults={
+            "group_name": message.chat.title
+        }
+    )
+    print("GROUP CREATED: ", created)
+    cached_groups = cached_groups.append(new_group)
+    
+    cache.set("bot_groups_ids", cached_groups, timeout=constants.CACHE_TIMEOUT_DAY)
+
 
 # BUTTON ACTIONS HANDLERS
 # ---------------------------------------------------------------------------------
@@ -444,7 +465,11 @@ async def command_start_handler(message: Message, state: FSMContext) -> None:
 
 @dp.message(lambda message: message.forward_date is not None)
 async def forward_message_handler(message: Message):
-    # print(str(message) + "\n" + ("-"*80) + "\n")
+    print("MESSAGE_TYPE: ", message.chat.type)
+    if message.chat.type in {ChatType.CHANNEL, ChatType.GROUP, ChatType.SUPERGROUP}:
+        await update_groups(message)
+        return
+    
     if message.chat.type != ChatType.PRIVATE: return
 
     media_group_id = message.media_group_id
@@ -542,22 +567,10 @@ async def period_input_handler(message: Message, state: FSMContext):
 @dp.message()
 async def message_main_handler(message: Message, state: FSMContext):
     print("MESSAGE_TYPE: ", message.chat.type)
-    if message.chat.type in {"group", "supergroup"}:
-        print("TRY TO CREATE NEW GROUP: ", message.chat)
-        group_id = message.chat.id
-        cached_groups:list = cache.get("bot_groups_ids", list())
-        if group_id in cached_groups: return
-
-        new_group, created = await GroupProfile.objects.aupdate_or_create(
-            chat_id=group_id,
-            defaults={
-                "group_name": message.chat.title
-            }
-        )
-        print("GROUP CREATED: ", created)
-        cached_groups = cached_groups.append(new_group)
+    print({ChatType.CHANNEL, ChatType.GROUP, ChatType.SUPERGROUP})
+    if message.chat.type in {ChatType.CHANNEL, ChatType.GROUP, ChatType.SUPERGROUP}:
         
-        cache.set("bot_groups_ids", cached_groups, timeout=constants.CACHE_TIMEOUT_DAY)
+        await update_groups(message)
         return
     
     if message.chat.type != ChatType.PRIVATE: return
@@ -570,16 +583,22 @@ async def message_main_handler(message: Message, state: FSMContext):
 # ---------------------------------------------------------------------------------
 
 @dp.chat_member(ChatMemberUpdated)
-async def handle_bot_left_group(event: ChatMemberUpdated):
+async def handle_bot_left_group(event: ChatMemberUpdated, state: FSMContext):
+    print("HANDLE @dp.chat_member(ChatMemberUpdated)")
     if event.new_chat_member.status == "left" and event.new_chat_member.user.id == event.bot.id:
         group_id = event.chat.id
         try:
-            group = GroupProfile.objects.get(chat_id=group_id)
+            group = await sync_to_async(GroupProfile.objects.get)(chat_id=group_id)
             group.active = False
             group.deleted = True
             group.save()
         except GroupProfile.DoesNotExist:
             pass
+
+
+# @dp.user_joined()
+# async def user_joined_handler(event: ChatMemberUpdated):
+#     print("HANDLE user_joined_handler")
 
 
 async def main() -> None:
