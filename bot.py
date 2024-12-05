@@ -125,6 +125,7 @@ BUTTON_ACTIONS = {
 }
 
 # HELPER FUNCTIONS
+# ---------------------------------------------------------------------------------
 async def update_actions_stack(state: FSMContext, action_name:str) -> None:
     data:dict = await state.get_data()
     if action_name not in BUTTON_ACTIONS: raise ValueError(f"There is no action with name {action_name}")
@@ -162,6 +163,15 @@ async def update_groups(message: Message) -> None:
     
     cache.set("bot_groups_ids", cached_groups, timeout=constants.CACHE_TIMEOUT_DAY)
 
+
+def has_access(user: AiogramUser|None) -> bool:
+    if not (user.username in settings.ALLOWED_USERS or\
+        int(user.id) in settings.ALLOWED_USERS) or not user: 
+        print(f"user {user} has no access to tgbot.")
+        return False
+    
+    print(f"user {user} has access to tgbot.")
+    return True
 
 # BUTTON ACTIONS HANDLERS
 # ---------------------------------------------------------------------------------
@@ -452,15 +462,6 @@ async def text_button_main_handler(message: Message):
 # ---------------------------------------------------------------------------------
 media_groups_cache = defaultdict(list)
 
-def has_access(user: AiogramUser|None) -> bool:
-    if not (user.username in settings.ALLOWED_USERS or\
-        int(user.id) in settings.ALLOWED_USERS) or not user: 
-        print(f"user {user} has no access to tgbot.")
-        return False
-    
-    print(f"user {user} has access to tgbot.")
-    return True
-
 
 @dp.message(CommandStart())
 async def command_start_handler(message: Message, state: FSMContext) -> None:
@@ -579,11 +580,12 @@ async def period_input_handler(message: Message, state: FSMContext):
 async def message_main_handler(message: Message, state: FSMContext):
     print("MESSAGE_CONTENT_TYPE: ", message.content_type)
 
-    if message.content_type == ContentType.NEW_CHAT_MEMBERS:
-        print(f"NEW CHAT MEMBER: {message.new_chat_members} BOT: {message.bot.id}")
+    if (message.content_type in \
+        {ContentType.NEW_CHAT_MEMBERS, ContentType.GROUP_CHAT_CREATED}) and\
+        not has_access(message.from_user):
 
-    if message.content_type == ContentType.GROUP_CHAT_CREATED:
-        ...
+        message.bot.leave_chat(message.chat.id)
+        return
 
     if message.chat.type in {ChatType.CHANNEL, ChatType.GROUP, ChatType.SUPERGROUP}:
         # TODO: leave group if bot was added not by admin
