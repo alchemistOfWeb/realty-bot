@@ -25,7 +25,7 @@ from dotenv import dotenv_values
 # aoigram modules
 from aiogram import Bot, Dispatcher, html
 from aiogram.client.default import DefaultBotProperties
-from aiogram.enums import ParseMode, ChatType
+from aiogram.enums import ParseMode, ChatType, ContentType
 from aiogram.filters import CommandStart
 
 from aiogram.utils.keyboard import (
@@ -36,7 +36,7 @@ from aiogram.utils.keyboard import (
 from aiogram.types import (
     Message, InputFile, FSInputFile, InlineKeyboardMarkup, 
     InlineKeyboardButton, CallbackQuery, InputMediaPhoto,
-    ChatMemberUpdated
+    ChatMemberUpdated, User as AiogramUser
 )
 
 from aiogram.fsm.context import FSMContext
@@ -56,7 +56,10 @@ BOT_API_TOKEN = os.getenv('BOT_API_TOKEN')
 
 LANGUAGE = "ru"
 
+
 # set dispatcher for tg bot handlers
+
+bot:Bot = None
 dp = Dispatcher()
 
 class ButtonAction():
@@ -417,7 +420,7 @@ async def start_handler(message: Message, state: FSMContext):
 # ---------------------------------------------------------------------------------
 
 @dp.callback_query()
-async def button_inline_actions_handler(callback_query: CallbackQuery, state: FSMContext):
+async def inline_button_main_handler(callback_query: CallbackQuery, state: FSMContext):
     if callback_query.message.chat.type != ChatType.PRIVATE: return
     data:list = callback_query.data.split('%')
     action_name:str = data[0]
@@ -439,19 +442,25 @@ BUTTON_ACTIONS_SEARCH_DICT = {
 }
 
 @dp.message(lambda message: message.text in BUTTON_ACTIONS_SEARCH_DICT.keys())
-async def button_actions_handler(message: Message):
+async def text_button_main_handler(message: Message):
     if message.chat.type != ChatType.PRIVATE: return
-    btn_action = BUTTON_ACTIONS_SEARCH_DICT[message.text]
-    await btn_action.run(message)
+    await BUTTON_ACTIONS_SEARCH_DICT[message.text].run(message)
     await message.delete()
 
-
-# @dp.message(lambda message: message.forward_date is not None)
-# @dp.message(lambda message: message.caption is not None)
 
 # OTHER HANDLERS
 # ---------------------------------------------------------------------------------
 media_groups_cache = defaultdict(list)
+
+def has_access(user: AiogramUser|None) -> bool:
+    if not (user.username in settings.ALLOWED_USERS or\
+        int(user.id) in settings.ALLOWED_USERS) or not user: 
+        print(f"user {user} has no access to tgbot.")
+        return False
+    
+    print(f"user {user} has access to tgbot.")
+    return True
+
 
 @dp.message(CommandStart())
 async def command_start_handler(message: Message, state: FSMContext) -> None:
@@ -460,6 +469,7 @@ async def command_start_handler(message: Message, state: FSMContext) -> None:
     TODO: must work only for admins in their individual chats
     """
     if message.chat.type != ChatType.PRIVATE: return
+    if not has_access(message.from_user): return
     await start_handler(message, state)
 
 
@@ -471,6 +481,7 @@ async def forward_message_handler(message: Message):
         return
     
     if message.chat.type != ChatType.PRIVATE: return
+    if not has_access(message.from_user): return
 
     media_group_id = message.media_group_id
     media_groups_cache[media_group_id].append(message)
@@ -566,14 +577,21 @@ async def period_input_handler(message: Message, state: FSMContext):
 
 @dp.message()
 async def message_main_handler(message: Message, state: FSMContext):
-    print("MESSAGE_TYPE: ", message.chat.type)
-    print({ChatType.CHANNEL, ChatType.GROUP, ChatType.SUPERGROUP})
+    print("MESSAGE_CONTENT_TYPE: ", message.content_type)
+
+    if message.content_type == ContentType.NEW_CHAT_MEMBERS:
+        print(f"NEW CHAT MEMBER: {message.new_chat_members} BOT: {message.bot.id}")
+
+    if message.content_type == ContentType.GROUP_CHAT_CREATED:
+        ...
+
     if message.chat.type in {ChatType.CHANNEL, ChatType.GROUP, ChatType.SUPERGROUP}:
-        
+        # TODO: leave group if bot was added not by admin
         await update_groups(message)
         return
     
     if message.chat.type != ChatType.PRIVATE: return
+    if not has_access(message.from_user): return
 
     data = await state.get_data()
     input_action:str = data.get("input_action")

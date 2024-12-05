@@ -176,6 +176,16 @@ BOT_DEFAULT_COUNTDOWN = os.getenv("BOT_DEFAULT_COUNTDOWN", "3:00")
 BOT_START_SENDING_TIME = os.getenv("BOT_START_SENDING_TIME", "8:00")
 BOT_END_SENDING_TIME = os.getenv("BOT_END_SENDING_TIME", "23:00")
 
+# ID or usernames of users that allowed to use the bot
+ALLOWED_USERS = [
+    "Nikitas_endeavour",
+    475380548,
+    "WhiteSafeEstate",
+    5730801538,
+    "vrnightmares",
+    182264367
+]
+
 
 # Password validation
 # https://docs.djangoproject.com/en/5.1/ref/settings/#auth-password-validators
