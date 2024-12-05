@@ -17,7 +17,7 @@ from asgiref.sync import sync_to_async
 os.environ.setdefault('DJANGO_SETTINGS_MODULE', 'config.settings')
 django.setup()
 from django.conf import settings
-
+from django.db.models.query import QuerySet # for typing annotation
 
 # third-party modules
 from dotenv import dotenv_values
@@ -149,17 +149,18 @@ async def pop_actions_stack(state: FSMContext) -> str|None:
 async def update_groups(message: Message) -> None:
     print("TRY TO CREATE NEW GROUP: ", message.chat)
     group_id = message.chat.id
-    cached_groups:list = cache.get("bot_groups_ids") or []
+    cached_groups:set = cache.get("bot_groups_ids") or set()
     if group_id in cached_groups: return
 
     new_group, created = await GroupProfile.objects.aupdate_or_create(
         chat_id=group_id,
         defaults={
-            "group_name": message.chat.title
+            "group_name": message.chat.title,
+            "deleted": False
         }
     )
     print("GROUP CREATED: ", created)
-    cached_groups = cached_groups.append(new_group)
+    cached_groups = cached_groups.add(new_group)
     
     cache.set("bot_groups_ids", cached_groups, timeout=constants.CACHE_TIMEOUT_DAY)
 
@@ -576,19 +577,38 @@ async def period_input_handler(message: Message, state: FSMContext):
 # ---------------------------------------------------------------------------------
 
 
+
+
 @dp.message()
 async def message_main_handler(message: Message, state: FSMContext):
     print("MESSAGE_CONTENT_TYPE: ", message.content_type)
 
-    if (message.content_type in \
-        {ContentType.NEW_CHAT_MEMBERS, ContentType.GROUP_CHAT_CREATED}) and\
-        not has_access(message.from_user):
+    if (message.content_type == ContentType.LEFT_CHAT_MEMBER):
+        qs:QuerySet[GroupProfile] = GroupProfile.objects.filter(chat_id=message.chat.id)
+        await qs.aupdate(deleted=True)
+        group_ids:set = cache.get("bot_groups_ids") or set()
+        
+        try:
+            group_ids.remove(message.chat.id)
+        except KeyError:
+            pass
 
+        cache.set("bot_groups_ids", group_ids)
+        print(f"LEFT CHAT {message.chat.title}")
+        return
+
+    if message.content_type == ContentType.GROUP_CHAT_CREATED and\
+        not has_access(message.from_user):
+        message.bot.leave_chat(message.chat.id)
+        return
+
+    if message.content_type == ContentType.NEW_CHAT_MEMBERS and\
+        any(user.id == message.bot.id for user in message.new_chat_members) and\
+        not has_access(message.from_user):
         message.bot.leave_chat(message.chat.id)
         return
 
     if message.chat.type in {ChatType.CHANNEL, ChatType.GROUP, ChatType.SUPERGROUP}:
-        # TODO: leave group if bot was added not by admin
         await update_groups(message)
         return
     
@@ -601,24 +621,6 @@ async def message_main_handler(message: Message, state: FSMContext):
     await MESSAGE_ACTIONS[input_action].run(message, state)
     await state.update_data(input_action=None)
 # ---------------------------------------------------------------------------------
-
-@dp.chat_member(ChatMemberUpdated)
-async def handle_bot_left_group(event: ChatMemberUpdated, state: FSMContext):
-    print("HANDLE @dp.chat_member(ChatMemberUpdated)")
-    if event.new_chat_member.status == "left" and event.new_chat_member.user.id == event.bot.id:
-        group_id = event.chat.id
-        try:
-            group = await sync_to_async(GroupProfile.objects.get)(chat_id=group_id)
-            group.active = False
-            group.deleted = True
-            group.save()
-        except GroupProfile.DoesNotExist:
-            pass
-
-
-# @dp.user_joined()
-# async def user_joined_handler(event: ChatMemberUpdated):
-#     print("HANDLE user_joined_handler")
 
 
 async def main() -> None:
