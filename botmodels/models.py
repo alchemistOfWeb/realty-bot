@@ -1,15 +1,29 @@
 from django.db import models
 from django.core.cache import cache
 from threading import Lock
+from aiogram.types import User as AiogramUser
 
 
 class UserProfile(models.Model):
-    user_id = models.BigIntegerField(unique=True)
-    name = models.CharField(max_length=255)
+    user_id = models.BigIntegerField(null=True, blank=True)
+    username = models.CharField(default="", null=False, max_length=255)
+    chat_id = models.BigIntegerField(null=True, blank=True)
     is_admin = models.BooleanField(default=False, null=False, blank=False)
 
     def __str__(self):
-        return self.name
+        return self.username
+
+
+class TgSetting(models.Model):
+    end_sending_time = models.TimeField(null=True)
+    start_sending_time = models.TimeField(null=True)
+    period_sending_time = models.TimeField(null=True)
+    do_sending = models.BooleanField(null=False, default=False)
+    user_profile = models.OneToOneField(
+        UserProfile, null=True, blank=True, related_name="bot_setting", on_delete=models.CASCADE)
+    
+    def __str__(self):
+        return self.user_profile.username
 
 
 class GroupProfile(models.Model):
@@ -37,8 +51,33 @@ class SingletonMeta(type):
 class BotSetting(metaclass=SingletonMeta):
     default_timeout = None
 
-    def __init__(self, prefix="bot_setting:"):
+    # def set_start_sending_time(self):
+    #     ...
+
+    # def get_start_sending_time(self):
+    #     ...
+
+    # def set_end_sending_time(self):
+    #     ...
+
+    # def get_end_sending_time(self):
+    #     ...
+
+    # def set_period_sending_time(self):
+    #     ...
+
+    # def get_period_sending_time(self):
+    #     ...
+
+    # start_sending_time = property(set_start_sending_time, get_start_sending_time)
+    # end_sending_time = property(set_end_sending_time, get_end_sending_time)
+    # period_sending_time = property(set_period_sending_time, get_period_sending_time)
+    
+
+    def __init__(self, user:AiogramUser=None, prefix="bot_setting:"):
         self.prefix = prefix
+        if user:
+            self.tguser = user
 
     def _key(self, name):
         """incapsulating variables of the settings from other db vars"""

@@ -13,6 +13,7 @@ import django
 from django.db import IntegrityError
 from django.core.cache import cache
 from asgiref.sync import sync_to_async
+from django.db.models import Q
 
 os.environ.setdefault('DJANGO_SETTINGS_MODULE', 'config.settings')
 django.setup()
@@ -44,7 +45,7 @@ from magic_filter import F
 
 # handmade modules
 from botmodels.tasks import send_message_to_groups, send_message_async, add_task_to_queue
-from botmodels.models import BotSetting, GroupProfile
+from botmodels.models import BotSetting, TgSetting, GroupProfile, UserProfile
 import constants
 # from botmodels.models import UserProfile
 # import texts # mesage-templates
@@ -115,13 +116,15 @@ BUTTON_ACTIONS = {
     "pause_sending": ButtonAction("pause_sending", inline=True, rus="⛔Остановить рассылку⛔", callback_name="pause_sending"),
     "start_sending": ButtonAction("start_sending", inline=True, rus="🟢Начать рассылку🟢", callback_name="start_sending"),
     "groups": ButtonAction("groups", inline=True, rus="👨‍👨‍👦‍👦Группы👨‍👨‍👦‍👦", callback_name="groups_handler"),
+    "admins": ButtonAction("admins", inline=True, rus="👤Админы👤", callback_name="admins_handler"),
     "timings": ButtonAction("timings", inline=True, rus="⌚Тайминги⌚", callback_name="timings_handler"),
     "go_back": ButtonAction("go_back", inline=True, rus="🔙Назад🔙", callback_name="go_back_handler", takes_callback_query=True),
     "start_sending_option": ButtonAction("start_sending_option", inline=True, rus="Начало отправки", callback_name="start_sending_option"),
     "end_sending_option": ButtonAction("end_sending_option", inline=True, rus="Конец отправки", callback_name="end_sending_option"),
     "period_option": ButtonAction("period_option", inline=True, rus="Промежуток", callback_name="period_option"),
-    "group_choice": ButtonAction("group_choice", inline=True, rus="Промежуток", callback_name="group_choice_handler"),
-    "add_group": ButtonAction("add_group", inline=True, rus="Промежуток", callback_name="add_group_handler"),
+    "group_choice": ButtonAction("group_choice", inline=True, callback_name="group_choice_handler"),
+    "add_new_admin": ButtonAction("add_new_admin", rus="Добавить", inline=True, callback_name="add_new_admin_handler"),
+    "admin_choice": ButtonAction("admin_choice", inline=True, callback_name="admin_choice_handler"),
 }
 
 # HELPER FUNCTIONS
@@ -179,13 +182,17 @@ def has_access(user: AiogramUser|None) -> bool:
 
 async def go_to_settings(message: Message, state: FSMContext):
     keyboard = InlineKeyboardBuilder()
-    keyboard.add(
+    keyboard.row(
         InlineKeyboardButton(
             text=BUTTON_ACTIONS["groups"].get_text(), callback_data="groups"),
         InlineKeyboardButton(
+            text=BUTTON_ACTIONS["admins"].get_text(), callback_data="admins")
+    )
+    keyboard.row(
+        InlineKeyboardButton(
             text=BUTTON_ACTIONS["timings"].get_text(), callback_data="timings"),
         InlineKeyboardButton(
-            text=BUTTON_ACTIONS["go_back"].get_text(), callback_data="go_back"),
+            text=BUTTON_ACTIONS["go_back"].get_text(), callback_data="go_back")
     )
     await message.edit_text(
         text="Настройки бота", 
@@ -256,6 +263,72 @@ async def groups_handler(message: Message, state: FSMContext):
     await update_actions_stack(state, "groups")
 
 
+async def admins_handler(message: Message, state: FSMContext, updated:bool=None):
+    keyboard = InlineKeyboardBuilder()
+    admins = await sync_to_async(list)(UserProfile.objects.all())
+
+    for admin in admins:
+        status_symbol:str = '🟩' if admin.is_admin else '🟥'
+        print("ADMINS_LIST")
+        print(admin.id, admin.chat_id, admin.username)
+        keyboard.row(
+            InlineKeyboardButton(
+                text=f"{status_symbol}{admin.username or admin.user_id}", 
+                callback_data=f"admin_choice%{admin.id}")
+        )
+
+    keyboard.row(
+        InlineKeyboardButton(
+            text=BUTTON_ACTIONS["add_new_admin"].get_text(), callback_data="add_new_admin"),
+        InlineKeyboardButton(
+            text=BUTTON_ACTIONS["go_back"].get_text(), callback_data="go_back")
+    )
+
+    text:str = "🟩 - значит пользователь может выполнять рассылку и изменять персональные тайминги\n"+\
+        "🟥- пользователь ничего не может\n\n"+\
+        "Нажав на кнопку с названием группы вы изменяете данный статус"
+
+    if not updated:
+        await message.edit_text(
+            text=text,
+            reply_markup=keyboard.as_markup()
+        )
+    else:
+        await message.answer(
+            text=text,
+            reply_markup=keyboard.as_markup()
+        )
+
+    await update_actions_stack(state, "admins")
+
+
+async def add_new_admin_handler(message: Message, state: FSMContext, errors:list=None):
+    keyboard = InlineKeyboardBuilder()
+    keyboard.row(
+        InlineKeyboardButton(
+            text=BUTTON_ACTIONS["go_back"].get_text(), callback_data="go_back")
+    )
+
+    errors_str = "\n".join([error["message"] for error in errors]) if errors else ""
+    text = f"{errors_str}\nВведите id пользователя в формате"
+
+    if not errors:
+        await message.edit_text(
+            text=text,
+            reply_markup=keyboard.as_markup(),
+            parse_mode=ParseMode.MARKDOWN
+        )
+    else:
+        await message.answer(
+            text=text,
+            reply_markup=keyboard.as_markup(),
+            parse_mode=ParseMode.MARKDOWN
+        )
+
+    await update_actions_stack(state, "add_new_admin")
+    await set_input_action(state, "add_new_admin")
+
+
 async def group_choice_handler(message: Message, state: FSMContext, action_id:str):
     group = await sync_to_async(GroupProfile.objects.get)(id=int(action_id))
     group.active = not group.active
@@ -263,12 +336,15 @@ async def group_choice_handler(message: Message, state: FSMContext, action_id:st
     await BUTTON_ACTIONS[await pop_actions_stack(state)].run(message, state)
 
 
+async def admin_choice_handler(message: Message, state: FSMContext, action_id:str):
+    admin = await UserProfile.objects.aget(id=int(action_id))
+    admin.is_admin = not admin.is_admin
+    await sync_to_async(admin.save)()
+    await BUTTON_ACTIONS[await pop_actions_stack(state)].run(message, state)
 
-async def add_group_handler(message: Message, state: FSMContext):
-    ... # I think we dont need it
 
 
-async def timings_handler(message: Message, state: FSMContext, updated=False):
+async def timings_handler(message: Message, state: FSMContext, updated:bool=False):
     keyboard = InlineKeyboardBuilder()
     keyboard.row(
         InlineKeyboardButton(
@@ -478,6 +554,7 @@ async def command_start_handler(message: Message, state: FSMContext) -> None:
 @dp.message(lambda message: message.forward_date is not None)
 async def forward_message_handler(message: Message):
     print("MESSAGE_TYPE: ", message.chat.type)
+    
     if message.chat.type in {ChatType.CHANNEL, ChatType.GROUP, ChatType.SUPERGROUP}:
         await update_groups(message)
         return
@@ -517,6 +594,7 @@ MESSAGE_ACTIONS = {
     "start_sending_time": MessageAction("start_sending_time", "start_sending_input_handler"),
     "end_sending_time": MessageAction("start_sending_time", "end_sending_input_handler"),
     "period_time": MessageAction("start_sending_time", "period_input_handler"),
+    "add_new_admin": MessageAction("add_new_admin", "add_new_admin_input_handler"),
 }
 
 def is_valid_time(time_str: str) -> bool:
@@ -574,10 +652,44 @@ async def period_input_handler(message: Message, state: FSMContext):
     await BUTTON_ACTIONS[await pop_actions_stack(state)]\
         .run(message, state, updated=True)
 
+
+def is_valid_username(input_text:str) -> bool:
+    # TODO: use regex
+    if not (input_text.startswith("@") and len(input_text) > 4): return False
+    if " " in input_text: return False
+    return True
+
+def is_valid_userid(input_text:str) -> bool:
+    return input_text.isnumeric()
+
+
+async def add_new_admin_input_handler(message: Message, state: FSMContext):
+    input_text = message.text.strip()
+    
+    # if not is_valid_username(input_text):
+    #     errors = [{message: "Некорректный формат ввода, попробуйте еще раз"}]
+    #     return await BUTTON_ACTIONS[await pop_actions_stack(state)].run(message, state, errors)
+
+    if not is_valid_userid(input_text):
+        errors = [{message: "Некорректный формат ввода, попробуйте еще раз"}]
+        return await BUTTON_ACTIONS[await pop_actions_stack(state)].run(message, state, errors)
+    
+    # BotSetting().set("period_sending_time", input_text)
+    await UserProfile.objects.aupdate_or_create(
+        user_id=input_text,
+        defaults={
+            "is_admin": True,
+        }
+    )
+    
+    tmp = await pop_actions_stack(state)
+    print(f"from stack: {tmp}")
+    tmp = await pop_actions_stack(state)
+    print(f"from stack2: {tmp}")
+    await BUTTON_ACTIONS[tmp]\
+        .run(message, state, updated=True)
+
 # ---------------------------------------------------------------------------------
-
-
-
 
 @dp.message()
 async def message_main_handler(message: Message, state: FSMContext):
@@ -613,7 +725,26 @@ async def message_main_handler(message: Message, state: FSMContext):
         return
     
     if message.chat.type != ChatType.PRIVATE: return
-    if not has_access(message.from_user): return
+    message.from_user.id
+    # ////////////////////
+    try:
+        dbuser:UserProfile = await UserProfile.objects\
+            .aget(Q(user_id=message.from_user.id) | Q(username__contains=message.from_user.username))
+
+        has_changes:bool = False
+        
+        if dbuser.username != message.from_user.username: has_changes = True
+        dbuser.username = message.from_user.username
+        
+        if dbuser.chat_id != message.chat.id: has_changes = True
+        dbuser.chat_id = message.chat.id
+
+        if has_changes:
+           await sync_to_async(dbuser.save)()
+    except UserProfile.DoesNotExist:
+        pass
+
+    if not (has_access(message.from_user) or dbuser.is_admin): return
 
     data = await state.get_data()
     input_action:str = data.get("input_action")

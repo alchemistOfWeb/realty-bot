@@ -38,7 +38,8 @@ async def send_message_async(
     bot_chat_id and message_ids - needs to delete message in bot chat 
     with user after sending post to groups
     """
-
+    if not BotSetting().get("do_sending", True): return
+    
     bot:Bot = Bot(token=settings.BOT_API_TOKEN, default=DefaultBotProperties(parse_mode=ParseMode.HTML))
     
     groups:List[GroupProfile] = \
@@ -105,7 +106,7 @@ def get_next_task_eta():
 
         last_task_eta = next_eta
     
-    BotSetting().set(LAST_TASK_CACHE_KEY, last_task_eta.isoformat())
+    BotSetting().set(LAST_TASK_CACHE_KEY, last_task_eta.isoformat()) # TODO: remade botsetting -> cache
 
     return last_task_eta
 
