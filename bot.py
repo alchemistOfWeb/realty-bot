@@ -727,8 +727,9 @@ async def message_main_handler(message: Message, state: FSMContext):
     if message.chat.type != ChatType.PRIVATE: return
     message.from_user.id
     # ////////////////////
+    dbuser:UserProfile|None = None
     try:
-        dbuser:UserProfile = await UserProfile.objects\
+        dbuser = await UserProfile.objects\
             .aget(Q(user_id=message.from_user.id) | Q(username__contains=message.from_user.username))
 
         has_changes:bool = False
@@ -744,7 +745,7 @@ async def message_main_handler(message: Message, state: FSMContext):
     except UserProfile.DoesNotExist:
         pass
 
-    if not (has_access(message.from_user) or dbuser.is_admin): return
+    if not (has_access(message.from_user) or (dbuser and dbuser.is_admin)): return
 
     data = await state.get_data()
     input_action:str = data.get("input_action")
