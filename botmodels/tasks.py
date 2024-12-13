@@ -12,9 +12,11 @@ from asgiref.sync import sync_to_async
 
 # django
 from django.conf import settings
+from django.core.cache import cache
+from django.db.models import Q
 
 # handmade
-from botmodels.models import GroupProfile, BotSetting
+from botmodels.models import GroupProfile, UserProfile, TgSetting, BotSetting
 
 # aiogram
 from aiogram import Bot
@@ -38,7 +40,19 @@ async def send_message_async(
     bot_chat_id and message_ids - needs to delete message in bot chat 
     with user after sending post to groups
     """
-    if not BotSetting().get("do_sending", True): return
+    usersetting_list:List[TgSetting] = await sync_to_async(list)(TgSetting.objects\
+        .filter(Q(user_profile__isnull=True) | Q(user_profile__chat_id=int(bot_chat_id))))
+
+    usersetting:TgSetting|None = None
+    if len(usersetting_list) > 1:
+        usersetting = usersetting_list[0] if usersetting_list[0].user_profile else usersetting_list[1]
+    elif len(usersetting_list) == 1:
+        usersetting = usersetting_list[0]
+    else:
+        usersetting = None
+
+    # if not BotSetting().get("do_sending", True): return
+    if not (usersetting and usersetting.do_sending): return
     
     bot:Bot = Bot(token=settings.BOT_API_TOKEN, default=DefaultBotProperties(parse_mode=ParseMode.HTML))
     
@@ -74,8 +88,8 @@ def send_message_to_groups(
     asyncio.run(send_message_async(media_list, caption, bot_chat_id, message_ids))
 
 
-def get_next_task_eta():
-    now:datetime.datetime = datetime.datetime.now(pytz.timezone('Asia/Yerevan'))  # TODO: Incapsulate getting hours/minutes
+def get_next_task_eta(user_id:str|int):
+    now:datetime.datetime = datetime.datetime.now(pytz.timezone(settings.TIME_ZONE))  # TODO: Incapsulate getting hours/minutes
     
     hour, minute = BotSetting()\
         .get("start_sending_time", settings.BOT_START_SENDING_TIME).split(':')
@@ -87,7 +101,9 @@ def get_next_task_eta():
 
     end_time = now.replace(hour=int(hour), minute=int(minute), second=0)
 
-    last_task_eta = BotSetting().get(LAST_TASK_CACHE_KEY)
+    # last_task_eta = BotSetting().get(LAST_TASK_CACHE_KEY)
+    last_task_eta = cache.get(f"{LAST_TASK_CACHE_KEY}_{user_id}")
+
 
     if not last_task_eta:
         last_task_eta = start_time if now < start_time else now
@@ -106,7 +122,9 @@ def get_next_task_eta():
 
         last_task_eta = next_eta
     
-    BotSetting().set(LAST_TASK_CACHE_KEY, last_task_eta.isoformat()) # TODO: remade botsetting -> cache
+    # BotSetting().set(LAST_TASK_CACHE_KEY, last_task_eta.isoformat()) # TODO: remade botsetting -> cache
+
+    cache.set(f"{LAST_TASK_CACHE_KEY}_{user_id}", last_task_eta.isoformat()) 
 
     return last_task_eta
 
@@ -116,7 +134,7 @@ def add_task_to_queue(media_list: list, caption: str, bot_chat_id: str = None, m
     Dinamically add tasks to the queue.
     """
     
-    next_eta = get_next_task_eta()
+    next_eta = get_next_task_eta(bot_chat_id)
     send_message_to_groups.apply_async(
         args=[media_list, caption, bot_chat_id, message_ids],
         eta=next_eta 

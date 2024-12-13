@@ -13,7 +13,7 @@ class UserProfile(models.Model):
     def __str__(self):
         return self.username
 
-
+# TODO: handle it
 class TgSetting(models.Model):
     end_sending_time = models.TimeField(null=True)
     start_sending_time = models.TimeField(null=True)

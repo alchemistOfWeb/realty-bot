@@ -1,6 +1,7 @@
 #!/bin/bash
 # Запуск миграций и бота
 poetry run python manage.py migrate
+poetry run python manage.py seed
 poetry run python bot.py &  # Запускаем бота в фоновом режиме
 
 # Запуск Celery

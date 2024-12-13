@@ -1,7 +1,7 @@
 
 # python built-in modules
 from collections import defaultdict
-from datetime import datetime
+from datetime import datetime, time
 import calendar
 import logging
 import sys
@@ -46,6 +46,7 @@ from magic_filter import F
 # handmade modules
 from botmodels.tasks import send_message_to_groups, send_message_async, add_task_to_queue
 from botmodels.models import BotSetting, TgSetting, GroupProfile, UserProfile
+from botmodels.functions import get_setting_by_chat_id
 import constants
 # from botmodels.models import UserProfile
 # import texts # mesage-templates
@@ -202,7 +203,11 @@ async def go_to_settings(message: Message, state: FSMContext):
 
 
 async def pause_sending(message: Message, state: FSMContext):
-    BotSetting().set("do_sending", False)
+    # BotSetting().set("do_sending", False)
+    tgsetting = await get_setting_by_chat_id(message.chat.id)
+    tgsetting.do_sending = False
+    await sync_to_async(tgsetting.save)()
+
     keyboard = InlineKeyboardBuilder()
     keyboard.add(
         InlineKeyboardButton(text=BUTTON_ACTIONS["settings"].get_text(), callback_data="settings"),
@@ -218,7 +223,10 @@ async def pause_sending(message: Message, state: FSMContext):
 
 
 async def start_sending(message: Message, state: FSMContext):
-    BotSetting().set("do_sending", True)
+    tgsetting = await get_setting_by_chat_id(message.chat.id)
+    tgsetting.do_sending = True
+    await sync_to_async(tgsetting.save)()
+
     keyboard = InlineKeyboardBuilder()
     keyboard.add(
         InlineKeyboardButton(text=BUTTON_ACTIONS["settings"].get_text(), callback_data="settings"),
@@ -360,9 +368,15 @@ async def timings_handler(message: Message, state: FSMContext, updated:bool=Fals
         InlineKeyboardButton(
             text=BUTTON_ACTIONS["go_back"].get_text(), callback_data="go_back"),
     )
-    start_sending_time = BotSetting().get('start_sending_time', settings.BOT_START_SENDING_TIME)
-    end_sending_time = BotSetting().get('end_sending_time', settings.BOT_END_SENDING_TIME)
-    period_sending_time = BotSetting().get('period_sending_time', settings.BOT_DEFAULT_COUNTDOWN)
+
+    tgsetting = await get_setting_by_chat_id(message.chat.id)
+    # start_sending_time = BotSetting().get('start_sending_time', settings.BOT_START_SENDING_TIME)
+    # end_sending_time = BotSetting().get('end_sending_time', settings.BOT_END_SENDING_TIME)
+    # period_sending_time = BotSetting().get('period_sending_time', settings.BOT_DEFAULT_COUNTDOWN)
+    start_sending_time = tgsetting.start_sending_time.strftime('%H:%M')
+    end_sending_time = tgsetting.end_sending_time.strftime('%H:%M')
+    period_sending_time = tgsetting.period_sending_time.strftime('%M:%S')
+
     text = ("Настройка таймингов\n" if not updated else "Тайминги успешно обновлены!\n") +\
         f"Начало отправки: {start_sending_time}\n" +\
         f"Конец отправки: {end_sending_time}\n" +\
@@ -468,7 +482,9 @@ async def go_back_handler(callback_query: CallbackQuery, state: FSMContext):
 
 
 async def start_handler(message: Message, state: FSMContext):
-    pause_sending = BotSetting().get("do_sending", False)
+    # pause_sending = BotSetting().get("do_sending", False)
+    tgsetting = await get_setting_by_chat_id(message.chat.id)
+    pause_sending = tgsetting.do_sending
 
     data = await state.get_data()
     go_back_called = data.get("go_back_called", False)
@@ -488,16 +504,18 @@ async def start_handler(message: Message, state: FSMContext):
                 )
     )
 
-    period:str = BotSetting().get("period_sending_time", settings.BOT_DEFAULT_COUNTDOWN)
+    # period:str = BotSetting().get("period_sending_time", settings.BOT_DEFAULT_COUNTDOWN)
+    period:str = tgsetting.period_sending_time.strftime('%M:%S')
+
     if go_back_called:
         await message.edit_text(
-            f"Здравствуйте, {html.bold(message.from_user.full_name)}!\n" +\
+            f"Здравствуйте, {html.bold(message.chat.full_name)}!\n" +\
             f"Данный бот обрабатывает пересылаемые сообщения и рассылает их раз в {period} минут",
             reply_markup=keyboard.as_markup()
         )
     else:
         await message.answer(
-            f"Здравствуйте, {html.bold(message.from_user.full_name)}!\n" +\
+            f"Здравствуйте, {html.bold(message.chat.full_name)}!\n" +\
             f"Данный бот обрабатывает пересылаемые сообщения и рассылает их раз в {period} минут",
             reply_markup=keyboard.as_markup()
         )
@@ -524,15 +542,17 @@ async def inline_button_main_handler(callback_query: CallbackQuery, state: FSMCo
         await btn_action.run(callback_query, state)
 
 
-BUTTON_ACTIONS_SEARCH_DICT = {
-    btn_action.get_text():btn_action for btn_action in BUTTON_ACTIONS.values()
-}
+# BUTTON_ACTIONS_SEARCH_DICT = {
+#     btn_action.get_text():btn_action for btn_action in BUTTON_ACTIONS.values()
+# }
 
-@dp.message(lambda message: message.text in BUTTON_ACTIONS_SEARCH_DICT.keys())
-async def text_button_main_handler(message: Message):
-    if message.chat.type != ChatType.PRIVATE: return
-    await BUTTON_ACTIONS_SEARCH_DICT[message.text].run(message)
-    await message.delete()
+# @dp.message(lambda message: message.text in BUTTON_ACTIONS_SEARCH_DICT.keys())
+# async def text_button_main_handler(message: Message):
+#     if message.chat.type != ChatType.PRIVATE: return
+#     print(f"message.text: {message.text}")
+#     print(f"message.text IN search dict?: {message.text in BUTTON_ACTIONS_SEARCH_DICT.keys()}")
+#     await BUTTON_ACTIONS_SEARCH_DICT[message.text].run(message)
+#     await message.delete()
 
 
 # OTHER HANDLERS
@@ -618,7 +638,10 @@ async def start_sending_input_handler(message: Message, state: FSMContext):
         errors = [{message: "Некорректный формат ввода, попробуйте еще раз"}]
         return await BUTTON_ACTIONS[await pop_actions_stack(state)].run(message, state, errors)
     
-    BotSetting().set("start_sending_time", input_text)
+    # BotSetting().set("start_sending_time", input_text)
+    tgsetting = await get_setting_by_chat_id(message.chat.id)
+    tgsetting.start_sending_time = datetime.strptime(input_text, "%H:%M").time()
+    await sync_to_async(tgsetting.save)()
 
     await pop_actions_stack(state)
     await BUTTON_ACTIONS[await pop_actions_stack(state)]\
@@ -632,7 +655,10 @@ async def end_sending_input_handler(message: Message, state: FSMContext):
         errors = [{message: "Некорректный формат ввода, попробуйте еще раз"}]
         return await BUTTON_ACTIONS[await pop_actions_stack(state)].run(message, state, errors)
     
-    BotSetting().set("end_sending_time", input_text)
+    # BotSetting().set("end_sending_time", input_text)
+    tgsetting = await get_setting_by_chat_id(message.chat.id)
+    tgsetting.end_sending_time = datetime.strptime(input_text, "%H:%M").time()
+    await sync_to_async(tgsetting.save)()
     
     await pop_actions_stack(state)
     await BUTTON_ACTIONS[await pop_actions_stack(state)]\
@@ -646,7 +672,10 @@ async def period_input_handler(message: Message, state: FSMContext):
         errors = [{message: "Некорректный формат ввода, попробуйте еще раз"}]
         return await BUTTON_ACTIONS[await pop_actions_stack(state)].run(message, state, errors)
     
-    BotSetting().set("period_sending_time", input_text)
+    # BotSetting().set("period_sending_time", input_text)
+    tgsetting = await get_setting_by_chat_id(message.chat.id)
+    tgsetting.period_sending_time = datetime.strptime(input_text, "%M:%S").time()
+    await sync_to_async(tgsetting.save)()
     
     await pop_actions_stack(state)
     await BUTTON_ACTIONS[await pop_actions_stack(state)]\
@@ -665,28 +694,30 @@ def is_valid_userid(input_text:str) -> bool:
 
 async def add_new_admin_input_handler(message: Message, state: FSMContext):
     input_text = message.text.strip()
-    
-    # if not is_valid_username(input_text):
-    #     errors = [{message: "Некорректный формат ввода, попробуйте еще раз"}]
-    #     return await BUTTON_ACTIONS[await pop_actions_stack(state)].run(message, state, errors)
 
     if not is_valid_userid(input_text):
         errors = [{message: "Некорректный формат ввода, попробуйте еще раз"}]
         return await BUTTON_ACTIONS[await pop_actions_stack(state)].run(message, state, errors)
     
-    # BotSetting().set("period_sending_time", input_text)
-    await UserProfile.objects.aupdate_or_create(
+    user, created = await UserProfile.objects.aupdate_or_create(
         user_id=input_text,
         defaults={
             "is_admin": True,
         }
     )
+    if created or user.bot_setting:
+        default_setting = await TgSetting.objects.aget(user_profile__isnull=True)
+        await TgSetting.objects.aupdate_or_create(
+            user_profile=user,
+            defaults=dict(
+                start_sending_time=default_setting.start_sending_time,
+                end_sending_time=default_setting.end_sending_time,
+                period_sending_time=default_setting.period_sending_time
+            )
+        )
     
-    tmp = await pop_actions_stack(state)
-    print(f"from stack: {tmp}")
-    tmp = await pop_actions_stack(state)
-    print(f"from stack2: {tmp}")
-    await BUTTON_ACTIONS[tmp]\
+    await pop_actions_stack(state)
+    await BUTTON_ACTIONS[await pop_actions_stack(state)]\
         .run(message, state, updated=True)
 
 # ---------------------------------------------------------------------------------

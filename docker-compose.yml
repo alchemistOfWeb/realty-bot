@@ -7,6 +7,7 @@ services:
     command: >
               bash -c "poetry run python manage.py makemigrations &&
                       poetry run python manage.py migrate &&
+                      poetry run python manage.py seed &&
                       poetry run python bot.py"
     volumes:
       - .:/usr/src/app/
