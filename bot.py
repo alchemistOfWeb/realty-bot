@@ -358,7 +358,7 @@ async def add_new_admin_handler(message: Message, state: FSMContext, errors:list
     )
 
     errors_str = "\n".join([error["message"] for error in errors]) if errors else ""
-    text = f"{errors_str}\nВведите id пользователя в формате"
+    text = f"{errors_str}\nВведите id пользователя"
 
     if not errors:
         await message.edit_text(

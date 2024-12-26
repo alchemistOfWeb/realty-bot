@@ -24,7 +24,7 @@ class TgSetting(models.Model):
         UserProfile, null=True, blank=True, related_name="bot_setting", on_delete=models.CASCADE)
     
     def __str__(self):
-        return f"TgSetting({self.user_profile})"
+        return f"TgSetting({self.user_profile_id})"
 
 
 class GroupProfile(models.Model):
