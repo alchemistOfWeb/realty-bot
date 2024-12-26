@@ -17,6 +17,7 @@ from django.db.models import Q
 
 # handmade
 from botmodels.models import GroupProfile, UserProfile, TgSetting, BotSetting
+from botmodels.functions import get_setting_by_chat_id
 
 # aiogram
 from aiogram import Bot
@@ -40,16 +41,17 @@ async def send_message_async(
     bot_chat_id and message_ids - needs to delete message in bot chat 
     with user after sending post to groups
     """
-    usersetting_list:List[TgSetting] = await sync_to_async(list)(TgSetting.objects\
-        .filter(Q(user_profile__isnull=True) | Q(user_profile__chat_id=int(bot_chat_id))))
+    # usersetting_list:List[TgSetting] = await sync_to_async(list)(TgSetting.objects\
+    #     .filter(Q(user_profile__isnull=True) | Q(user_profile__chat_id=int(bot_chat_id))))
 
-    usersetting:TgSetting|None = None
-    if len(usersetting_list) > 1:
-        usersetting = usersetting_list[0] if usersetting_list[0].user_profile else usersetting_list[1]
-    elif len(usersetting_list) == 1:
-        usersetting = usersetting_list[0]
-    else:
-        usersetting = None
+    # usersetting:TgSetting|None = None
+    # if len(usersetting_list) > 1:
+    #     usersetting = usersetting_list[0] if usersetting_list[0].user_profile else usersetting_list[1]
+    # elif len(usersetting_list) == 1:
+    #     usersetting = usersetting_list[0]
+    # else:
+    #     usersetting = None
+    usersetting:TgSetting = await get_setting_by_chat_id(bot_chat_id)
 
     # if not BotSetting().get("do_sending", True): return
     if not (usersetting and usersetting.do_sending): return
@@ -88,53 +90,66 @@ def send_message_to_groups(
     asyncio.run(send_message_async(media_list, caption, bot_chat_id, message_ids))
 
 
-def get_next_task_eta(user_id:str|int):
-    now:datetime.datetime = datetime.datetime.now(pytz.timezone(settings.TIME_ZONE))  # TODO: Incapsulate getting hours/minutes
+async def get_next_task_eta(user_id:str|int):
+    now:datetime.datetime = datetime.datetime.now(pytz.timezone(settings.TIME_ZONE))
     
-    hour, minute = BotSetting()\
-        .get("start_sending_time", settings.BOT_START_SENDING_TIME).split(':')
+    usersetting:TgSetting = await get_setting_by_chat_id(user_id)
 
+    # hour, minute = BotSetting()\
+    #     .get("start_sending_time", settings.BOT_START_SENDING_TIME).split(':')
+
+    hour = usersetting.start_sending_time.hour
+    minute = usersetting.start_sending_time.minute
     start_time = now.replace(hour=int(hour), minute=int(minute), second=0)
 
-    hour, minute = BotSetting()\
-        .get("end_sending_time", settings.BOT_END_SENDING_TIME).split(':')
+    # hour, minute = BotSetting()\
+    #     .get("end_sending_time", settings.BOT_END_SENDING_TIME).split(':')
 
+    hour = usersetting.end_sending_time.hour
+    minute = usersetting.end_sending_time.minute
     end_time = now.replace(hour=int(hour), minute=int(minute), second=0)
 
     # last_task_eta = BotSetting().get(LAST_TASK_CACHE_KEY)
-    last_task_eta = cache.get(f"{LAST_TASK_CACHE_KEY}_{user_id}")
-
+    # last_task_eta = cache.get(f"{LAST_TASK_CACHE_KEY}_{user_id}")
+    last_task_eta:datetime.datetime = usersetting.last_task_eta
 
     if not last_task_eta:
         last_task_eta = start_time if now < start_time else now
     else:
-        last_task_eta:datetime.datetime = datetime.datetime.fromisoformat(last_task_eta)
-        minutes, seconds = BotSetting()\
-            .get("period_sending_time", settings.BOT_DEFAULT_COUNTDOWN).split(':')
+        # last_task_eta:datetime.datetime = datetime.datetime.fromisoformat(last_task_eta)
+        
+        # minutes, seconds = BotSetting()\
+        #     .get("period_sending_time", settings.BOT_DEFAULT_COUNTDOWN).split(':')
+
+        minutes = usersetting.period_sending_time.minute
+        seconds = usersetting.period_sending_time.second
         
         if last_task_eta < now:
             last_task_eta = now
 
+        print(f"minutes: {minutes}\nseconds: {seconds}\n")
         next_eta = last_task_eta + datetime.timedelta(minutes=int(minutes), seconds=int(seconds))
+        print(f"next_eta before update: {next_eta}")
 
         if next_eta >= end_time:
             next_eta = start_time + datetime.timedelta(days=1)
 
+        print(f"next_eta after update: {next_eta}")
         last_task_eta = next_eta
     
     # BotSetting().set(LAST_TASK_CACHE_KEY, last_task_eta.isoformat()) 
-
-    cache.set(f"{LAST_TASK_CACHE_KEY}_{user_id}", last_task_eta.isoformat()) 
-
+    # cache.set(f"{LAST_TASK_CACHE_KEY}_{user_id}", last_task_eta.isoformat()) 
+    usersetting.last_task_eta = last_task_eta
+    await sync_to_async(usersetting.save)()
     return last_task_eta
 
 
-def add_task_to_queue(media_list: list, caption: str, bot_chat_id: str = None, message_ids: list = None):
+async def add_task_to_queue(media_list: list, caption: str, bot_chat_id: str = None, message_ids: list = None):
     """
     Dinamically add tasks to the queue.
     """
     
-    next_eta = get_next_task_eta(bot_chat_id)
+    next_eta = await get_next_task_eta(bot_chat_id)
     send_message_to_groups.apply_async(
         args=[media_list, caption, bot_chat_id, message_ids],
         eta=next_eta 

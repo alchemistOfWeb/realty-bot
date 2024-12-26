@@ -649,7 +649,7 @@ async def forward_message_handler(message: Message):
 
         # print("media_list: ", media_list)
         # await send_message_async(media_list, caption)
-        add_task_to_queue(media_list, caption, message.chat.id, message_ids)
+        await add_task_to_queue(media_list, caption, message.chat.id, message_ids)
 
 
 # MESSAGE ACTIONS HANDLERS

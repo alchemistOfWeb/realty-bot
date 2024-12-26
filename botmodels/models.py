@@ -19,6 +19,7 @@ class TgSetting(models.Model):
     end_sending_time = models.TimeField(null=True)
     start_sending_time = models.TimeField(null=True)
     period_sending_time = models.TimeField(null=True)
+    last_task_eta = models.DateTimeField(null=True)
     do_sending = models.BooleanField(null=False, default=False)
     user_profile = models.OneToOneField(
         UserProfile, null=True, blank=True, related_name="bot_setting", on_delete=models.CASCADE)
