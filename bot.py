@@ -624,6 +624,7 @@ async def forward_message_handler(message: Message):
     if message.chat.type != ChatType.PRIVATE: return
 
     user:UserProfile = await get_user_or_none(message.from_user.id)
+    print(f"has_access_as_root {has_access_as_root(message.from_user)}\nhas_access_as_admin {has_access_as_admin(user)}")
     if not (has_access_as_root(message.from_user) or has_access_as_admin(user)): return
 
     media_group_id = message.media_group_id
@@ -649,6 +650,7 @@ async def forward_message_handler(message: Message):
 
         # print("media_list: ", media_list)
         # await send_message_async(media_list, caption)
+        print("do add_task_to_queue")
         await add_task_to_queue(media_list, caption, message.chat.id, message_ids)
 
 
@@ -679,7 +681,7 @@ async def start_sending_input_handler(message: Message, state: FSMContext):
     input_text = message.text.strip().replace(" ", "")
     
     if not is_valid_time(input_text):
-        errors = [{message: "Некорректный формат ввода, попробуйте еще раз"}]
+        errors = [{"message": "Некорректный формат ввода, попробуйте еще раз"}]
         return await BUTTON_ACTIONS[await pop_actions_stack(state)].run(message, state, errors)
     
     # BotSetting().set("start_sending_time", input_text)
@@ -696,7 +698,7 @@ async def end_sending_input_handler(message: Message, state: FSMContext):
     input_text = message.text.strip().replace(" ", "")
     
     if not is_valid_time(input_text):
-        errors = [{message: "Некорректный формат ввода, попробуйте еще раз"}]
+        errors = [{"message": "Некорректный формат ввода, попробуйте еще раз"}]
         return await BUTTON_ACTIONS[await pop_actions_stack(state)].run(message, state, errors)
     
     # BotSetting().set("end_sending_time", input_text)
@@ -713,7 +715,7 @@ async def period_input_handler(message: Message, state: FSMContext):
     input_text = message.text.strip().replace(" ", "")
     
     if not is_valid_period(input_text):
-        errors = [{message: "Некорректный формат ввода, попробуйте еще раз"}]
+        errors = [{"message": "Некорректный формат ввода, попробуйте еще раз"}]
         return await BUTTON_ACTIONS[await pop_actions_stack(state)].run(message, state, errors)
     
     # BotSetting().set("period_sending_time", input_text)
@@ -740,7 +742,7 @@ async def add_new_admin_input_handler(message: Message, state: FSMContext):
     input_text = message.text.strip()
 
     if not is_valid_userid(input_text):
-        errors = [{message: "Некорректный формат ввода, попробуйте еще раз"}]
+        errors = [{"message": "Некорректный формат ввода, попробуйте еще раз"}]
         return await BUTTON_ACTIONS[await pop_actions_stack(state)].run(message, state, errors)
     
     user, created = await UserProfile.objects.aupdate_or_create(

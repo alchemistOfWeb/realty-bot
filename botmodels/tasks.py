@@ -95,32 +95,19 @@ async def get_next_task_eta(user_id:str|int):
     
     usersetting:TgSetting = await get_setting_by_chat_id(user_id)
 
-    # hour, minute = BotSetting()\
-    #     .get("start_sending_time", settings.BOT_START_SENDING_TIME).split(':')
-
     hour = usersetting.start_sending_time.hour
     minute = usersetting.start_sending_time.minute
     start_time = now.replace(hour=int(hour), minute=int(minute), second=0)
-
-    # hour, minute = BotSetting()\
-    #     .get("end_sending_time", settings.BOT_END_SENDING_TIME).split(':')
 
     hour = usersetting.end_sending_time.hour
     minute = usersetting.end_sending_time.minute
     end_time = now.replace(hour=int(hour), minute=int(minute), second=0)
 
-    # last_task_eta = BotSetting().get(LAST_TASK_CACHE_KEY)
-    # last_task_eta = cache.get(f"{LAST_TASK_CACHE_KEY}_{user_id}")
     last_task_eta:datetime.datetime = usersetting.last_task_eta
 
     if not last_task_eta:
         last_task_eta = start_time if now < start_time else now
     else:
-        # last_task_eta:datetime.datetime = datetime.datetime.fromisoformat(last_task_eta)
-        
-        # minutes, seconds = BotSetting()\
-        #     .get("period_sending_time", settings.BOT_DEFAULT_COUNTDOWN).split(':')
-
         minutes = usersetting.period_sending_time.minute
         seconds = usersetting.period_sending_time.second
         
@@ -137,8 +124,6 @@ async def get_next_task_eta(user_id:str|int):
         print(f"next_eta after update: {next_eta}")
         last_task_eta = next_eta
     
-    # BotSetting().set(LAST_TASK_CACHE_KEY, last_task_eta.isoformat()) 
-    # cache.set(f"{LAST_TASK_CACHE_KEY}_{user_id}", last_task_eta.isoformat()) 
     usersetting.last_task_eta = last_task_eta
     await sync_to_async(usersetting.save)()
     return last_task_eta
