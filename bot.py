@@ -6,6 +6,7 @@ import calendar
 import logging
 import sys
 import os
+# from threading import Lock
 
 # django modules
 import asyncio
@@ -51,6 +52,7 @@ import constants
 # from botmodels.models import UserProfile
 # import texts # mesage-templates
 
+# TODO: normal start handling
 
 # ENV variables
 # config = dotenv_values('.env')
@@ -111,6 +113,32 @@ class MessageAction():
             await callback(*args, **kwargs)
 
 
+# class SingletonMeta(type):
+#     """Metaclass implementing Singleton."""
+#     _instances = {}
+#     _lock = Lock()  # for thread safety
+
+#     def __call__(cls, *args, **kwargs):
+#         with cls._lock:
+#             if cls not in cls._instances:
+#                 instance = super().__call__(*args, **kwargs)
+#                 cls._instances[cls] = instance
+#         return cls._instances[cls]
+
+
+# class UserManager(metaclass=SingletonMeta):
+#     aiogram_user:UserProfile = None
+#     dbuser:UserProfile = None
+
+#     def has_access(self):
+#         if not (self.aiogram_user.username in settings.ALLOWED_USERS or\
+#             int(self.aiogram_user.id) in settings.ALLOWED_USERS) or not self.aiogram_user: 
+#             print(f"user {user} has no access to tgbot.")
+#             return False
+    
+#         print(f"user {user} has access to tgbot.")
+#         return True
+
 BUTTON_ACTIONS = {
     "start": ButtonAction("start", inline=True, rus="Start", callback_name="start_handler"),
     "settings": ButtonAction("settings", inline=True, rus="⚙Настройки⚙", callback_name="go_to_settings"),
@@ -169,14 +197,26 @@ async def update_groups(message: Message) -> None:
     cache.set("bot_groups_ids", cached_groups, timeout=constants.CACHE_TIMEOUT_DAY)
 
 
-def has_access(user: AiogramUser|None) -> bool:
-    if not (user.username in settings.ALLOWED_USERS or\
-        int(user.id) in settings.ALLOWED_USERS) or not user: 
+def has_access_as_root(user: AiogramUser|None) -> bool:
+    if not user or not (user.username in settings.ALLOWED_USERS or\
+        int(user.id) in settings.ALLOWED_USERS): 
         print(f"user {user} has no access to tgbot.")
         return False
     
-    print(f"user {user} has access to tgbot.")
+    print(f"user {user} may be has access to tgbot.")
     return True
+
+def has_access_as_admin(user: UserProfile|None) -> bool:
+    if not user or not user.is_admin:
+        return False
+
+    return True
+
+async def get_user_or_none(user_id:int|str) -> UserProfile|None:
+    try:
+        return await UserProfile.objects.aget(user_id=user_id)
+    except UserProfile.DoesNotExist:
+        return None
 
 # BUTTON ACTIONS HANDLERS
 # ---------------------------------------------------------------------------------
@@ -564,10 +604,12 @@ media_groups_cache = defaultdict(list)
 async def command_start_handler(message: Message, state: FSMContext) -> None:
     """
     This handler receives messages with `/start` command
-    TODO: must work only for admins in their individual chats
     """
     if message.chat.type != ChatType.PRIVATE: return
-    if not has_access(message.from_user): return
+
+    user:UserProfile = await get_user_or_none(message.from_user.id)
+    if not (has_access_as_root(message.from_user) or has_access_as_admin(user)): return
+    
     await start_handler(message, state)
 
 
@@ -580,7 +622,9 @@ async def forward_message_handler(message: Message):
         return
     
     if message.chat.type != ChatType.PRIVATE: return
-    if not has_access(message.from_user): return
+
+    user:UserProfile = await get_user_or_none(message.from_user.id)
+    if not (has_access_as_root(message.from_user) or has_access_as_admin(user)): return
 
     media_group_id = message.media_group_id
     media_groups_cache[media_group_id].append(message)
@@ -740,14 +784,23 @@ async def message_main_handler(message: Message, state: FSMContext):
         print(f"LEFT CHAT {message.chat.title}")
         return
 
+    dbuser:UserProfile = await get_user_or_none(message.from_user.id)
+    # dbuser:UserProfile = None
+    # if not (has_access_as_root(message.from_user) or has_access_as_admin(user)): return
+    # try:
+    #     dbuser = await UserProfile.objects\
+    #         .aget(Q(user_id=message.from_user.id) | Q(username__contains=message.from_user.username))
+    # except UserProfile.DoesNotExist:
+    #     pass
+
     if message.content_type == ContentType.GROUP_CHAT_CREATED and\
-        not has_access(message.from_user):
+        not (has_access_as_root(message.from_user) or has_access_as_admin(dbuser)):
         message.bot.leave_chat(message.chat.id)
         return
 
     if message.content_type == ContentType.NEW_CHAT_MEMBERS and\
         any(user.id == message.bot.id for user in message.new_chat_members) and\
-        not has_access(message.from_user):
+        not (has_access_as_root(message.from_user) or has_access_as_admin(dbuser)):
         message.bot.leave_chat(message.chat.id)
         return
 
@@ -756,27 +809,25 @@ async def message_main_handler(message: Message, state: FSMContext):
         return
     
     if message.chat.type != ChatType.PRIVATE: return
-    message.from_user.id
-    # ////////////////////
-    dbuser:UserProfile|None = None
-    try:
-        dbuser = await UserProfile.objects\
-            .aget(Q(user_id=message.from_user.id) | Q(username__contains=message.from_user.username))
 
+    # ////////////////////
+    
+    if dbuser:
         has_changes:bool = False
         
         if dbuser.username != message.from_user.username: has_changes = True
         dbuser.username = message.from_user.username
         
+        if dbuser.full_name != message.from_user.full_name: has_changes = True
+        dbuser.full_name = message.from_user.full_name
+        
         if dbuser.chat_id != message.chat.id: has_changes = True
         dbuser.chat_id = message.chat.id
 
         if has_changes:
-           await sync_to_async(dbuser.save)()
-    except UserProfile.DoesNotExist:
-        pass
+            await sync_to_async(dbuser.save)()
 
-    if not (has_access(message.from_user) or (dbuser and dbuser.is_admin)): return
+    if not (has_access_as_root(message.from_user) or has_access_as_admin(dbuser)): return
 
     data = await state.get_data()
     input_action:str = data.get("input_action")

@@ -122,7 +122,7 @@ def get_next_task_eta(user_id:str|int):
 
         last_task_eta = next_eta
     
-    # BotSetting().set(LAST_TASK_CACHE_KEY, last_task_eta.isoformat()) # TODO: remade botsetting -> cache
+    # BotSetting().set(LAST_TASK_CACHE_KEY, last_task_eta.isoformat()) 
 
     cache.set(f"{LAST_TASK_CACHE_KEY}_{user_id}", last_task_eta.isoformat()) 
 

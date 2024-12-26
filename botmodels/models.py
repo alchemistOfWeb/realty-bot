@@ -7,13 +7,14 @@ from aiogram.types import User as AiogramUser
 class UserProfile(models.Model):
     user_id = models.BigIntegerField(null=True, blank=True)
     username = models.CharField(default="", null=False, max_length=255)
+    full_name = models.CharField(default="", null=False, max_length=255)
     chat_id = models.BigIntegerField(null=True, blank=True)
     is_admin = models.BooleanField(default=False, null=False, blank=False)
 
     def __str__(self):
-        return self.username
+        return self.user_id
 
-# TODO: handle it
+
 class TgSetting(models.Model):
     end_sending_time = models.TimeField(null=True)
     start_sending_time = models.TimeField(null=True)
@@ -23,7 +24,7 @@ class TgSetting(models.Model):
         UserProfile, null=True, blank=True, related_name="bot_setting", on_delete=models.CASCADE)
     
     def __str__(self):
-        return self.user_profile.username
+        return f"TgSetting({self.user_profile})"
 
 
 class GroupProfile(models.Model):
