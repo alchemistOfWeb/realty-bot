@@ -51,6 +51,8 @@ async def send_message_async(
     #     usersetting = usersetting_list[0]
     # else:
     #     usersetting = None
+
+    print("send_message_async")
     usersetting:TgSetting = await get_setting_by_chat_id(bot_chat_id)
 
     # if not BotSetting().get("do_sending", True): return
@@ -87,12 +89,15 @@ def send_message_to_groups(
     """
     Task for sending messagesin into the groups by Celery
     """
+    print("sending messages to groups")
     asyncio.run(send_message_async(media_list, caption, bot_chat_id, message_ids))
 
 
 async def get_next_task_eta(user_id:str|int):
     now:datetime.datetime = datetime.datetime.now(pytz.timezone(settings.TIME_ZONE))
     
+    print(f"now datetime: {now}; ")
+    print(now)
     usersetting:TgSetting = await get_setting_by_chat_id(user_id)
 
     hour = usersetting.start_sending_time.hour
@@ -135,6 +140,7 @@ async def add_task_to_queue(media_list: list, caption: str, bot_chat_id: str = N
     """
     
     next_eta = await get_next_task_eta(bot_chat_id)
+    print(f"INFORMATION: {media_list} {caption} {bot_chat_id} {message_ids}")
     send_message_to_groups.apply_async(
         args=[media_list, caption, bot_chat_id, message_ids],
         eta=next_eta 
