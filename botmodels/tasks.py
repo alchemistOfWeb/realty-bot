@@ -117,10 +117,12 @@ async def get_next_task_eta(user_id:str|int):
         seconds = usersetting.period_sending_time.second
         
         if last_task_eta < now:
-            last_task_eta = now
-
+            next_eta = last_task_eta = now
+        else:
+            difference = datetime.timedelta(minutes=int(minutes), seconds=int(seconds))
+            next_eta = last_task_eta + difference
+        
         print(f"minutes: {minutes}\nseconds: {seconds}\n")
-        next_eta = last_task_eta + datetime.timedelta(minutes=int(minutes), seconds=int(seconds))
         print(f"next_eta before update: {next_eta}")
 
         if next_eta >= end_time:
