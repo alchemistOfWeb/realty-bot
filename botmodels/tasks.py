@@ -26,7 +26,7 @@ from aiogram.enums import ParseMode
 from aiogram.types import InputMediaPhoto, InputMedia
 from aiogram.utils.media_group import MediaGroupBuilder
 
-# BotSetting().get("do_sending")
+
 logger = get_task_logger(__name__)
 LAST_TASK_CACHE_KEY = 'last_task_eta'
 
@@ -41,18 +41,6 @@ async def send_message_async(
     bot_chat_id and message_ids - needs to delete message in bot chat 
     with user after sending post to groups
     """
-    # usersetting_list:List[TgSetting] = await sync_to_async(list)(TgSetting.objects\
-    #     .filter(Q(user_profile__isnull=True) | Q(user_profile__chat_id=int(bot_chat_id))))
-
-    # usersetting:TgSetting|None = None
-    # if len(usersetting_list) > 1:
-    #     usersetting = usersetting_list[0] if usersetting_list[0].user_profile else usersetting_list[1]
-    # elif len(usersetting_list) == 1:
-    #     usersetting = usersetting_list[0]
-    # else:
-    #     usersetting = None
-
-    print("send_message_async")
     usersetting:TgSetting = await get_setting_by_chat_id(bot_chat_id)
 
     # if not BotSetting().get("do_sending", True): return
@@ -68,12 +56,15 @@ async def send_message_async(
             media_group = MediaGroupBuilder(caption=caption)
 
             for media in media_list:
-                media_group.add_photo(media)
+                if media["type"] == "photo":
+                    media_group.add_photo(media["file_id"])
+                if media["type"] == "video":
+                    media_group.add_video(media["file_id"])
 
             await bot.send_media_group(chat_id=group.chat_id, media=media_group.build())
 
         except Exception as e:
-            print(f"Error of sending message to the group {group.chat_id}: {e}")
+            logger.error(f"Error of sending message to the group {group.chat_id}: {e}")
 
     if bot_chat_id and message_ids:
         await bot.delete_messages(bot_chat_id, message_ids)
@@ -96,8 +87,6 @@ def send_message_to_groups(
 async def get_next_task_eta(user_id:str|int):
     now:datetime.datetime = datetime.datetime.now(pytz.timezone(settings.TIME_ZONE))
     
-    print(f"now datetime: {now}; ")
-    print(now)
     usersetting:TgSetting = await get_setting_by_chat_id(user_id)
 
     hour = usersetting.start_sending_time.hour
@@ -116,14 +105,12 @@ async def get_next_task_eta(user_id:str|int):
         minutes = usersetting.period_sending_time.minute
         seconds = usersetting.period_sending_time.second
         
-        if last_task_eta < now:
+        difference = datetime.timedelta(minutes=int(minutes), seconds=int(seconds))
+
+        if last_task_eta < now - difference:
             next_eta = last_task_eta = now
         else:
-            difference = datetime.timedelta(minutes=int(minutes), seconds=int(seconds))
             next_eta = last_task_eta + difference
-        
-        print(f"minutes: {minutes}\nseconds: {seconds}\n")
-        print(f"next_eta before update: {next_eta}")
 
         if next_eta >= end_time:
             next_eta = start_time + datetime.timedelta(days=1)
@@ -142,7 +129,6 @@ async def add_task_to_queue(media_list: list, caption: str, bot_chat_id: str = N
     """
     
     next_eta = await get_next_task_eta(bot_chat_id)
-    print(f"INFORMATION: {media_list} {caption} {bot_chat_id} {message_ids}")
     send_message_to_groups.apply_async(
         args=[media_list, caption, bot_chat_id, message_ids],
         eta=next_eta 

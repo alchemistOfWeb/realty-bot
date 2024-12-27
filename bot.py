@@ -7,6 +7,8 @@ import logging
 import sys
 import os
 # from threading import Lock
+from typing import List
+
 
 # django modules
 import asyncio
@@ -191,7 +193,10 @@ async def update_groups(message: Message) -> None:
             "deleted": False
         }
     )
-    print("GROUP CREATED: ", created)
+    
+    if created:
+        logging.info("CREATED NEW GROUP: ", message.chat.title)
+
     cached_groups = cached_groups.add(new_group)
     
     cache.set("bot_groups_ids", cached_groups, timeout=constants.CACHE_TIMEOUT_DAY)
@@ -287,8 +292,6 @@ async def groups_handler(message: Message, state: FSMContext):
     
     for group in groups:
         status_symbol:str = '🟩' if group.active else '🟥'
-        print("GROUPS_LIST")
-        print(group.id, group.chat_id, group.group_name)
         keyboard.row(
             InlineKeyboardButton(
                 text=f"{status_symbol}{group.group_name}", 
@@ -317,8 +320,6 @@ async def admins_handler(message: Message, state: FSMContext, updated:bool=None)
 
     for admin in admins:
         status_symbol:str = '🟩' if admin.is_admin else '🟥'
-        print("ADMINS_LIST")
-        print(admin.id, admin.chat_id, admin.username)
         keyboard.row(
             InlineKeyboardButton(
                 text=f"{status_symbol}{admin.username or admin.user_id}", 
@@ -410,9 +411,6 @@ async def timings_handler(message: Message, state: FSMContext, updated:bool=Fals
     )
 
     tgsetting = await get_setting_by_chat_id(message.chat.id)
-    # start_sending_time = BotSetting().get('start_sending_time', settings.BOT_START_SENDING_TIME)
-    # end_sending_time = BotSetting().get('end_sending_time', settings.BOT_END_SENDING_TIME)
-    # period_sending_time = BotSetting().get('period_sending_time', settings.BOT_DEFAULT_COUNTDOWN)
     start_sending_time = tgsetting.start_sending_time.strftime('%H:%M')
     end_sending_time = tgsetting.end_sending_time.strftime('%H:%M')
     period_sending_time = tgsetting.period_sending_time.strftime('%M:%S')
@@ -597,7 +595,7 @@ async def inline_button_main_handler(callback_query: CallbackQuery, state: FSMCo
 
 # OTHER HANDLERS
 # ---------------------------------------------------------------------------------
-media_groups_cache = defaultdict(list)
+media_groups_cache: defaultdict[str, List[Message]] = defaultdict(list)
 
 
 @dp.message(CommandStart())
@@ -615,7 +613,7 @@ async def command_start_handler(message: Message, state: FSMContext) -> None:
 
 @dp.message(lambda message: message.forward_date is not None)
 async def forward_message_handler(message: Message):
-    print("MESSAGE_TYPE: ", message.chat.type)
+    print("FORWARD_MESSAGE_TYPE: ", message.chat.type)
     
     if message.chat.type in {ChatType.CHANNEL, ChatType.GROUP, ChatType.SUPERGROUP}:
         await update_groups(message)
@@ -624,7 +622,6 @@ async def forward_message_handler(message: Message):
     if message.chat.type != ChatType.PRIVATE: return
 
     user:UserProfile = await get_user_or_none(message.from_user.id)
-    print(f"has_access_as_root {has_access_as_root(message.from_user)}\nhas_access_as_admin {has_access_as_admin(user)}")
     if not (has_access_as_root(message.from_user) or has_access_as_admin(user)): return
 
     media_group_id = message.media_group_id
@@ -642,15 +639,18 @@ async def forward_message_handler(message: Message):
                 caption = msg.caption
             
             if msg.photo:
-                media_list.append(msg.photo[-1].file_id)
+                media_list.append(
+                    {"type": "photo", "file_id": msg.photo[-1].file_id})
+
+            if msg.video:
+                print(f"message contains some video: {msg.video.file_id}")
+                media_list.append(
+                    {"type": "video", "file_id": msg.video.file_id})
 
             message_ids.append(msg.message_id)
         
         del media_groups_cache[media_group_id]
 
-        # print("media_list: ", media_list)
-        # await send_message_async(media_list, caption)
-        print("do add_task_to_queue")
         await add_task_to_queue(media_list, caption, message.chat.id, message_ids)
 
 
