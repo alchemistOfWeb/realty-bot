@@ -122,15 +122,19 @@ async def get_next_task_eta(user_id:str|int):
     await sync_to_async(usersetting.save)()
     return last_task_eta
 
+import redis.asyncio as aioredis
+redis_client = aioredis.Redis(host='redis', port=6379, db=0)
 
 async def add_task_to_queue(media_list: list, caption: str, bot_chat_id: str = None, message_ids: list = None):
     """
     Dinamically add tasks to the queue.
     """
+    lock_name = f"queue_lock_{bot_chat_id or 'default'}"
     
-    next_eta = await get_next_task_eta(bot_chat_id)
-    send_message_to_groups.apply_async(
-        args=[media_list, caption, bot_chat_id, message_ids],
-        eta=next_eta 
-    )
-    logger.info(f"Задача добавлена в очередь. Следующий запуск в {next_eta}")
+    async with redis_client.lock(lock_name, timeout=10):
+        next_eta = await get_next_task_eta(bot_chat_id)
+        send_message_to_groups.apply_async(
+            args=[media_list, caption, bot_chat_id, message_ids],
+            eta=next_eta 
+        )
+        logger.info(f"Задача добавлена в очередь. Следующий запуск в {next_eta}")
